@@ -1,20 +1,31 @@
-// Anonymized explanation request. Sends ONLY {gene, phenotype, drug}.
-// No DNA, no rsIDs, no identifiers ever cross the network.
+// All proxy clients. Each function sends ONLY {gene, phenotype, drug, meds}
+// shaped payloads. No DNA, no rsIDs, no identifiers ever cross the network.
 
-const PROXY_URL = "http://localhost:8001/api/explain";
+const PROXY = "http://localhost:8001";
 
-export async function fetchExplanation({ gene, phenotype, drug }) {
-  const body = JSON.stringify({ gene, phenotype, drug });
-
-  const res = await fetch(PROXY_URL, {
+async function postJson(path, body) {
+  const res = await fetch(`${PROXY}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body,
+    body: JSON.stringify(body),
   });
+  if (!res.ok) throw new Error(`${path} returned ${res.status}`);
+  return res.json();
+}
 
-  if (!res.ok) {
-    throw new Error(`Proxy returned ${res.status}`);
-  }
-  const data = await res.json();
+export async function fetchExplanation({ gene, phenotype, drug }) {
+  const data = await postJson("/api/explain", { gene, phenotype, drug });
   return data.explanation;
+}
+
+export async function fetchDoctorQuestions({ phenotypes, medications }) {
+  const data = await postJson("/api/questions", {
+    phenotypes,
+    medications: medications ?? [],
+  });
+  return data.questions;
+}
+
+export async function fetchMedInteractions({ phenotypes, medications }) {
+  return postJson("/api/check-meds", { phenotypes, medications });
 }
