@@ -1,4 +1,4 @@
-# Incogenome — Complete Build Spec (for Claude Code)
+# DoseDNA — Complete Build Spec (for Claude Code)
 
 A privacy-first pharmacogenomics web app. The user loads a consumer DNA file (23andMe / AncestryDNA); the app reads it **entirely in the browser**, extracts a small set of drug-related variants, maps them to drug-metabolism status, and shows plain-language guidance on how specific medications may affect them. The raw DNA never leaves the device. Only an anonymized, non-identifying question (gene + phenotype + drug) is sent to the Claude API for a friendly explanation.
 
