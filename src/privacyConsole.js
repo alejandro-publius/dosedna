@@ -7,7 +7,15 @@
 //
 // Self-contained: builds its own DOM + CSS. Mount with installPrivacyConsole().
 
-const DNA_TOKENS = ["rs", "rsid", "genotype", "chromosome", "AA", "AG", "CC", "TT"];
+// Tag a payload as "dna-like" only on hard evidence of genetic data: rsIDs
+// ("rs" followed by 3+ digits), the 23andMe TSV header signature, or a long
+// run of ACGT-only characters. Loose letter pairs ("AA", "AG") would false-
+// positive on normal English / JSON like "caution" or "PAGE" — a red badge
+// during the demo would torpedo the whole pitch.
+const RS_ID = /\brs\d{3,}\b/i;
+const TSV_HEADER = /#\s*rsid\s+chromosome\s+position\s+genotype/i;
+const ACGT_RUN = /[ACGT]{20,}/;
+
 const PALETTE = {
   bg: "#0b0f17",
   fg: "#e7ecf3",
@@ -25,9 +33,8 @@ let listEl, counterEl, badgeEl;
 
 function tagPayload(text) {
   if (!text) return "empty";
-  const lower = text.toLowerCase();
-  for (const tok of DNA_TOKENS) {
-    if (lower.includes(tok.toLowerCase())) return "dna-like";
+  if (RS_ID.test(text) || TSV_HEADER.test(text) || ACGT_RUN.test(text)) {
+    return "dna-like";
   }
   return "safe";
 }
@@ -186,7 +193,8 @@ export function installPrivacyConsole() {
 
   originalFetch = window.fetch.bind(window);
   window.fetch = async (input, init = {}) => {
-    const url = typeof input === "string" ? input : input.url;
+    const url =
+      typeof input === "string" ? input : input.url ?? input.toString();
     const method = (init.method || "GET").toUpperCase();
     const body = init.body ? String(init.body) : "";
     const tag = tagPayload(body);

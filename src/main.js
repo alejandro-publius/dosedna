@@ -59,6 +59,11 @@ function startWorker() {
     if (type === "result") handleParsedGenotypes(event.data.genotypes);
     else if (type === "error") setStatus(`Parse error: ${event.data.message}`);
   };
+  worker.onerror = (event) => {
+    setStatus(
+      `Worker failed to load: ${event.message || event.filename || "unknown"}`,
+    );
+  };
 }
 
 async function handleParsedGenotypes(genotypes) {
@@ -157,40 +162,42 @@ async function onCheckMeds() {
   medsCheckBtn.textContent = "Check interactions";
 }
 
-function renderInteractions(data) {
-  const sections = [
-    ["Drug–gene", data.drug_gene],
-    ["Drug–drug", data.drug_drug],
-    ["Phenoconversion", data.phenoconversion],
-  ];
-  for (const [title, flags] of sections) {
-    const h = document.createElement("h4");
-    h.textContent = title;
-    medsResultsEl.appendChild(h);
-    if (!flags?.length) {
-      const p = document.createElement("p");
-      p.textContent = "No flags.";
-      p.style.color = "#8d97a7";
-      medsResultsEl.appendChild(p);
-      continue;
-    }
-    const ul = document.createElement("ul");
-    for (const f of flags) {
-      const li = document.createElement("li");
-      li.className = `interaction sev-${f.severity}`;
-      li.style.borderLeft = `4px solid ${
-        { info: "#52d273", caution: "#ffb454", avoid: "#ff5f6d" }[f.severity] ||
-        "#8d97a7"
-      }`;
-      li.innerHTML = `
-        <strong>${f.flag}</strong> <em>(${f.severity})</em>
-        <div>${f.explanation}</div>
-        <div class="ask"><strong>Ask:</strong> ${f.ask_clinician}</div>
-      `;
-      ul.appendChild(li);
-    }
-    medsResultsEl.appendChild(ul);
+const SEVERITY_COLOR = {
+  info: "#52d273",
+  caution: "#ffb454",
+  avoid: "#ff5f6d",
+};
+
+function renderInteractionSection(title, flags) {
+  const h = document.createElement("h4");
+  h.textContent = title;
+  medsResultsEl.appendChild(h);
+  if (!flags?.length) {
+    const p = document.createElement("p");
+    p.textContent = "No flags.";
+    p.style.color = "#8d97a7";
+    medsResultsEl.appendChild(p);
+    return;
   }
+  const ul = document.createElement("ul");
+  for (const f of flags) {
+    const li = document.createElement("li");
+    li.className = `interaction sev-${f.severity}`;
+    li.style.borderLeft = `4px solid ${SEVERITY_COLOR[f.severity] || "#8d97a7"}`;
+    li.innerHTML = `
+      <strong>${f.flag}</strong> <em>(${f.severity})</em>
+      <div>${f.explanation}</div>
+      <div class="ask"><strong>Ask:</strong> ${f.ask_clinician}</div>
+    `;
+    ul.appendChild(li);
+  }
+  medsResultsEl.appendChild(ul);
+}
+
+function renderInteractions(data) {
+  renderInteractionSection("Drug–gene", data.drug_gene);
+  renderInteractionSection("Drug–drug", data.drug_drug);
+  renderInteractionSection("Phenoconversion", data.phenoconversion);
 }
 
 async function onDoctorQuestions() {

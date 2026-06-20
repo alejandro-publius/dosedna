@@ -1,7 +1,8 @@
 // All proxy clients. Each function sends ONLY {gene, phenotype, drug, meds}
 // shaped payloads. No DNA, no rsIDs, no identifiers ever cross the network.
 
-const PROXY = "http://localhost:8001";
+// Set window.INCOGENOME_PROXY before main.js loads to point at a non-default host.
+const PROXY = globalThis.INCOGENOME_PROXY ?? "http://localhost:8001";
 
 async function postJson(path, body) {
   const res = await fetch(`${PROXY}${path}`, {

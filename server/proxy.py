@@ -11,18 +11,24 @@ Run:
     uvicorn proxy:app --reload --port 8001
 """
 
+import json
 import os
-from typing import Literal
+import re
+import sys
 
 from anthropic import Anthropic, APIError
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
+from typing import Literal
 
 load_dotenv()
 
 MODEL = "claude-sonnet-4-6"
+
+if not os.environ.get("ANTHROPIC_API_KEY"):
+    sys.exit("ANTHROPIC_API_KEY not set. Copy .env.example to .env and add a key.")
 
 SENTRY_DSN = os.environ.get("SENTRY_DSN")
 if SENTRY_DSN:
@@ -61,7 +67,8 @@ INTERACTIONS_SYSTEM = (
     "Each value is an array of {flag, severity, explanation, ask_clinician}. "
     "severity is one of: info, caution, avoid. "
     "Be conservative. Only flag things with documented evidence. If nothing to "
-    "flag in a category, return an empty array for it. Output only the JSON."
+    "flag in a category, return an empty array for it. Output ONLY the JSON object "
+    "with no surrounding text or markdown fences."
 )
 
 app = FastAPI(title="Incogenome proxy")
@@ -77,7 +84,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
 
 class ExplainRequest(BaseModel):
@@ -118,19 +125,21 @@ class Flag(BaseModel):
 
 
 class InteractionsResponse(BaseModel):
-    drug_gene: list[Flag]
-    drug_drug: list[Flag]
-    phenoconversion: list[Flag]
+    drug_gene: list[Flag] = Field(default_factory=list)
+    drug_drug: list[Flag] = Field(default_factory=list)
+    phenoconversion: list[Flag] = Field(default_factory=list)
 
 
-def _system_block(text: str) -> list[dict]:
-    return [
-        {
-            "type": "text",
-            "text": text,
-            "cache_control": {"type": "ephemeral"},
-        }
-    ]
+JSON_FENCE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
+JSON_OBJECT = re.compile(r"\{.*\}", re.DOTALL)
+
+
+def _extract_json(text: str) -> str:
+    fence = JSON_FENCE.search(text)
+    if fence:
+        return fence.group(1)
+    brace = JSON_OBJECT.search(text)
+    return brace.group(0) if brace else text
 
 
 def _call_claude(system_text: str, user_message: str, max_tokens: int = 500) -> str:
@@ -138,14 +147,12 @@ def _call_claude(system_text: str, user_message: str, max_tokens: int = 500) -> 
         response = client.messages.create(
             model=MODEL,
             max_tokens=max_tokens,
-            system=_system_block(system_text),
+            system=system_text,
             messages=[{"role": "user", "content": user_message}],
         )
     except APIError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    return "".join(
-        block.text for block in response.content if block.type == "text"
-    ).strip()
+        raise HTTPException(status_code=503, detail="upstream model error") from exc
+    return "".join(b.text for b in response.content if b.type == "text").strip()
 
 
 @app.get("/")
@@ -187,23 +194,17 @@ def questions(req: QuestionsRequest) -> QuestionsResponse:
 
 @app.post("/api/check-meds", response_model=InteractionsResponse)
 def check_meds(req: InteractionsRequest) -> InteractionsResponse:
-    import json
-
     pheno_lines = "\n".join(f"- {p.gene}: {p.phenotype}" for p in req.phenotypes)
-    meds = ", ".join(req.medications)
     user_message = (
         "Pharmacogenomic phenotypes:\n"
         f"{pheno_lines}\n\n"
-        f"Current medications: {meds}\n\n"
+        f"Current medications: {', '.join(req.medications)}\n\n"
         "Return the JSON object as specified."
     )
     text = _call_claude(INTERACTIONS_SYSTEM, user_message, max_tokens=900)
     try:
-        data = json.loads(text)
-        return InteractionsResponse(
-            drug_gene=[Flag(**f) for f in data.get("drug_gene", [])],
-            drug_drug=[Flag(**f) for f in data.get("drug_drug", [])],
-            phenoconversion=[Flag(**f) for f in data.get("phenoconversion", [])],
+        return InteractionsResponse(**json.loads(_extract_json(text)))
+    except (ValueError, ValidationError) as exc:
+        raise HTTPException(
+            status_code=502, detail=f"could not parse model output: {exc}"
         )
-    except (ValueError, KeyError, TypeError) as exc:
-        raise HTTPException(status_code=502, detail=f"bad model output: {exc}")
