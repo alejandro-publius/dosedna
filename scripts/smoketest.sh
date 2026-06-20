@@ -16,25 +16,25 @@ check() {
   printf "%-22s " "$name"
   local code
   if [[ -z "$body" ]]; then
-    code=$(curl -sS -o /tmp/incogenome_resp.json -w '%{http_code}' "$PROXY$path")
+    code=$(curl -sS -o /tmp/dosedna_resp.json -w '%{http_code}' "$PROXY$path")
   else
-    code=$(curl -sS -o /tmp/incogenome_resp.json -w '%{http_code}' \
+    code=$(curl -sS -o /tmp/dosedna_resp.json -w '%{http_code}' \
            -X "$method" "$PROXY$path" \
            -H 'Content-Type: application/json' -d "$body")
   fi
   if [[ "$code" == 2* ]]; then
     green "OK ($code)"
     PASS=$((PASS+1))
-    dim "  $(head -c 180 /tmp/incogenome_resp.json)..."
+    dim "  $(head -c 180 /tmp/dosedna_resp.json)..."
   else
     red "FAIL ($code)"
     FAIL=$((FAIL+1))
-    cat /tmp/incogenome_resp.json
+    cat /tmp/dosedna_resp.json
     echo
   fi
 }
 
-echo "== Incogenome proxy smoke test =="
+echo "== DoseDNA proxy smoke test =="
 
 check "health"       GET  "/"
 check "explain"      POST "/api/explain" \

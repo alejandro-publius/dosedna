@@ -1,10 +1,10 @@
-# Incogenome — 5-minute demo script
+# DoseDNA — 5-minute demo script
 
 Judging Sunday 4–6pm. Demos are 5 min max. Rehearse twice before going up.
 
 ## One-line pitch (memorize)
 
-> Incogenome is a privacy-first pharmacogenomics app. You drop in your 23andMe file, see how your DNA affects every drug in your medicine cabinet, and your genome never leaves your laptop. The pharmacogenomics is the wedge — the venture is private analysis for any sensitive health data.
+> DoseDNA is a privacy-first pharmacogenomics app. You drop in your 23andMe file, see how your DNA affects every drug in your medicine cabinet, and your genome never leaves your laptop. The pharmacogenomics is the wedge — the venture is private analysis for any sensitive health data.
 
 ## The 5 minutes (90s problem, 3m product, 30s ask)
 

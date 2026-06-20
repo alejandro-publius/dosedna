@@ -1,5 +1,5 @@
 """
-Incogenome explanation + reasoning proxy.
+DoseDNA explanation + reasoning proxy.
 
 Holds the Anthropic API key. Browser calls into here. The proxy NEVER sees
 DNA, rsIDs, or any identifier. Only sees {gene, phenotype, drug, meds[]}.
@@ -72,7 +72,7 @@ INTERACTIONS_SYSTEM = (
     '{"drug_gene":[], "drug_drug":[], "phenoconversion":[]}.'
 )
 
-app = FastAPI(title="Incogenome proxy")
+app = FastAPI(title="DoseDNA proxy")
 
 # Any localhost / 127.0.0.1 origin works. Any external origin is blocked.
 app.add_middleware(

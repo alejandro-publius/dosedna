@@ -1,8 +1,8 @@
 // All proxy clients. Each function sends ONLY {gene, phenotype, drug, meds}
 // shaped payloads. No DNA, no rsIDs, no identifiers ever cross the network.
-// Set window.INCOGENOME_PROXY before main.js loads to point at a non-default host.
+// Set window.DOSEDNA_PROXY before main.js loads to point at a non-default host.
 
-const PROXY = globalThis.INCOGENOME_PROXY ?? "http://localhost:8001";
+const PROXY = globalThis.DOSEDNA_PROXY ?? "http://localhost:8001";
 const TIMEOUT_MS = 30000;
 
 async function postJson(path, body) {
