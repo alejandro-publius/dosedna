@@ -15,7 +15,7 @@ import json
 import os
 import re
 import sys
-from typing import Literal
+from typing import Literal, Optional
 
 from anthropic import Anthropic, APIError
 from dotenv import load_dotenv
@@ -153,7 +153,7 @@ JSON_FENCE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
 JSON_OBJECT = re.compile(r"\{[\s\S]*\}")
 
 
-def _extract_json(text: str) -> str | None:
+def _extract_json(text: str) -> Optional[str]:
     fence = JSON_FENCE.search(text)
     if fence:
         return fence.group(1)
