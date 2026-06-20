@@ -15,13 +15,13 @@ import json
 import os
 import re
 import sys
+from typing import Literal
 
 from anthropic import Anthropic, APIError
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, ValidationError
-from typing import Literal
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 load_dotenv()
 
@@ -68,18 +68,16 @@ INTERACTIONS_SYSTEM = (
     "severity is one of: info, caution, avoid. "
     "Be conservative. Only flag things with documented evidence. If nothing to "
     "flag in a category, return an empty array for it. Output ONLY the JSON object "
-    "with no surrounding text or markdown fences."
+    "with no surrounding text or markdown fences. If you cannot answer, return "
+    '{"drug_gene":[], "drug_drug":[], "phenoconversion":[]}.'
 )
 
 app = FastAPI(title="Incogenome proxy")
 
+# Any localhost / 127.0.0.1 origin works. Any external origin is blocked.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-        "http://localhost:5173",
-    ],
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_methods=["POST", "GET"],
     allow_headers=["*"],
 )
@@ -117,11 +115,32 @@ class InteractionsRequest(BaseModel):
     medications: list[str] = Field(..., min_length=1, max_length=30)
 
 
+SEVERITY_MAP = {
+    "warning": "caution",
+    "warn": "caution",
+    "moderate": "caution",
+    "high": "avoid",
+    "severe": "avoid",
+    "low": "info",
+    "minor": "info",
+}
+
+
 class Flag(BaseModel):
     flag: str
     severity: Literal["info", "caution", "avoid"]
     explanation: str
-    ask_clinician: str
+    ask_clinician: str = ""
+
+    @field_validator("severity", mode="before")
+    @classmethod
+    def coerce_severity(cls, v):
+        if not isinstance(v, str):
+            return "caution"
+        v = v.lower().strip()
+        if v in {"info", "caution", "avoid"}:
+            return v
+        return SEVERITY_MAP.get(v, "caution")
 
 
 class InteractionsResponse(BaseModel):
@@ -131,15 +150,15 @@ class InteractionsResponse(BaseModel):
 
 
 JSON_FENCE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
-JSON_OBJECT = re.compile(r"\{.*\}", re.DOTALL)
+JSON_OBJECT = re.compile(r"\{[\s\S]*\}")
 
 
-def _extract_json(text: str) -> str:
+def _extract_json(text: str) -> str | None:
     fence = JSON_FENCE.search(text)
     if fence:
         return fence.group(1)
     brace = JSON_OBJECT.search(text)
-    return brace.group(0) if brace else text
+    return brace.group(0) if brace else None
 
 
 def _call_claude(system_text: str, user_message: str, max_tokens: int = 500) -> str:
@@ -179,16 +198,21 @@ def questions(req: QuestionsRequest) -> QuestionsResponse:
         f"{pheno_lines}\n\n"
         f"Current medications: {meds}\n\n"
         "Generate 4-6 specific questions this patient should bring to their "
-        "doctor or pharmacist."
+        "doctor or pharmacist. Format as bullet points."
     )
-    text = _call_claude(QUESTIONS_SYSTEM, user_message, max_tokens=400)
-    bullets = [
-        line.lstrip("-*• ").strip()
-        for line in text.splitlines()
-        if line.strip() and line.lstrip().startswith(("-", "*", "•"))
-    ]
+    text = _call_claude(QUESTIONS_SYSTEM, user_message, max_tokens=500)
+    bullets = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped[0] in "-*•":
+            bullets.append(stripped.lstrip("-*• ").strip())
+        elif re.match(r"^\d+[.)]\s+", stripped):
+            bullets.append(re.sub(r"^\d+[.)]\s+", "", stripped))
     if not bullets:
-        bullets = [line.strip() for line in text.splitlines() if line.strip()]
+        # Last resort: split on sentence-ish boundaries.
+        bullets = [s.strip() for s in re.split(r"(?<=[.?])\s+", text) if s.strip()]
     return QuestionsResponse(questions=bullets[:6])
 
 
@@ -201,10 +225,12 @@ def check_meds(req: InteractionsRequest) -> InteractionsResponse:
         f"Current medications: {', '.join(req.medications)}\n\n"
         "Return the JSON object as specified."
     )
-    text = _call_claude(INTERACTIONS_SYSTEM, user_message, max_tokens=900)
+    text = _call_claude(INTERACTIONS_SYSTEM, user_message, max_tokens=2000)
+    extracted = _extract_json(text)
+    if not extracted:
+        # Refusal or unparseable — return empty result; client renders "no flags".
+        return InteractionsResponse()
     try:
-        return InteractionsResponse(**json.loads(_extract_json(text)))
-    except (ValueError, ValidationError) as exc:
-        raise HTTPException(
-            status_code=502, detail=f"could not parse model output: {exc}"
-        )
+        return InteractionsResponse(**json.loads(extracted))
+    except (ValueError, ValidationError):
+        return InteractionsResponse()

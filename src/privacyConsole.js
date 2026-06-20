@@ -1,10 +1,11 @@
 // Privacy Console — the demo's hero moment.
 //
-// Monkey-patches window.fetch so every outbound network call from this page
+// Patches every common outbound-network primitive so any data leaving the page
 // is intercepted, recorded, and shown in a live panel. Judges can pop this
 // open and verify that DNA never leaves the device — only tiny anonymized
 // {gene, phenotype, drug, meds} payloads do.
 //
+// Patches: fetch, XMLHttpRequest, navigator.sendBeacon, WebSocket.
 // Self-contained: builds its own DOM + CSS. Mount with installPrivacyConsole().
 
 // Tag a payload as "dna-like" only on hard evidence of genetic data: rsIDs
@@ -28,7 +29,6 @@ const PALETTE = {
 let mounted = false;
 let bytesOut = 0;
 const log = [];
-let originalFetch = null;
 let listEl, counterEl, badgeEl;
 
 function tagPayload(text) {
@@ -93,7 +93,7 @@ function buildPanel() {
   counter.innerHTML = `
     <div>DNA bytes that left your device: <strong id="pc-bytes" style="color:${PALETTE.accent}">0 B</strong></div>
     <div style="color:${PALETTE.dim};margin-top:4px">
-      Every fetch() from this page is logged below in real time.
+      Every fetch, XHR, beacon, and WebSocket from this page is logged below.
     </div>
   `;
 
@@ -183,6 +183,85 @@ function recordCall(entry) {
   renderEntry(entry);
 }
 
+function makeEntry({ url, method, body }) {
+  const bodyStr = body ? String(body) : "";
+  return {
+    time: Date.now(),
+    url: String(url),
+    method,
+    bodyPreview: bodyStr ? bodyStr.slice(0, 400) : "(no body)",
+    bodySize: new Blob([bodyStr]).size,
+    tag: tagPayload(bodyStr),
+  };
+}
+
+function patchFetch() {
+  const orig = window.fetch.bind(window);
+  window.fetch = (input, init = {}) => {
+    const url =
+      typeof input === "string" ? input : input.url ?? input.toString();
+    recordCall(
+      makeEntry({
+        url,
+        method: (init.method || "GET").toUpperCase(),
+        body: init.body,
+      }),
+    );
+    return orig(input, init);
+  };
+}
+
+function patchXHR() {
+  const proto = window.XMLHttpRequest.prototype;
+  const origOpen = proto.open;
+  const origSend = proto.send;
+  proto.open = function (method, url) {
+    this._pcUrl = url;
+    this._pcMethod = method;
+    return origOpen.apply(this, arguments);
+  };
+  proto.send = function (body) {
+    recordCall(
+      makeEntry({
+        url: this._pcUrl,
+        method: `XHR.${(this._pcMethod || "GET").toUpperCase()}`,
+        body,
+      }),
+    );
+    return origSend.apply(this, arguments);
+  };
+}
+
+function patchSendBeacon() {
+  if (!navigator.sendBeacon) return;
+  const orig = navigator.sendBeacon.bind(navigator);
+  navigator.sendBeacon = (url, data) => {
+    recordCall(makeEntry({ url, method: "BEACON", body: data }));
+    return orig(url, data);
+  };
+}
+
+function patchWebSocket() {
+  const Orig = window.WebSocket;
+  if (!Orig) return;
+  const Wrapped = function (url, protocols) {
+    recordCall(makeEntry({ url, method: "WS.open", body: "" }));
+    const ws = new Orig(url, protocols);
+    const origSend = ws.send.bind(ws);
+    ws.send = (data) => {
+      recordCall(makeEntry({ url, method: "WS.send", body: data }));
+      return origSend(data);
+    };
+    return ws;
+  };
+  Wrapped.prototype = Orig.prototype;
+  Wrapped.CONNECTING = Orig.CONNECTING;
+  Wrapped.OPEN = Orig.OPEN;
+  Wrapped.CLOSING = Orig.CLOSING;
+  Wrapped.CLOSED = Orig.CLOSED;
+  window.WebSocket = Wrapped;
+}
+
 export function installPrivacyConsole() {
   if (mounted) return;
   mounted = true;
@@ -191,27 +270,13 @@ export function installPrivacyConsole() {
   counterEl = dom.counter;
   badgeEl = dom.badge;
 
-  originalFetch = window.fetch.bind(window);
-  window.fetch = async (input, init = {}) => {
-    const url =
-      typeof input === "string" ? input : input.url ?? input.toString();
-    const method = (init.method || "GET").toUpperCase();
-    const body = init.body ? String(init.body) : "";
-    const tag = tagPayload(body);
-    const entry = {
-      time: Date.now(),
-      url,
-      method,
-      bodyPreview: body ? body.slice(0, 400) : "(no body)",
-      bodySize: new Blob([body]).size,
-      tag,
-    };
-    recordCall(entry);
-    return originalFetch(input, init);
-  };
+  patchFetch();
+  patchXHR();
+  patchSendBeacon();
+  patchWebSocket();
 
   console.log(
-    "%cPrivacy Console armed. Every fetch is now logged on screen.",
+    "%cPrivacy Console armed. fetch / XHR / sendBeacon / WebSocket all logged.",
     "color:#52d273;font-weight:bold",
   );
 }
