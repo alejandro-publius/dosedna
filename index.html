@@ -44,6 +44,8 @@
   .pill .dot{width:7px;height:7px;border-radius:50%;background:var(--azure); box-shadow:0 0 0 4px rgba(37,99,235,.18)}
   .hero h1{font-size:clamp(2.5rem,5vw,3.9rem); line-height:1.04; letter-spacing:-.03em; margin:20px 0 0; font-weight:800}
   .hero h1 .g{background:linear-gradient(90deg,var(--azure),#6366f1); -webkit-background-clip:text; background-clip:text; color:transparent}
+  .hero p.defn{font-size:.95rem; color:var(--muted); margin:14px 0 0; max-width:50ch; letter-spacing:-.005em}
+  .hero p.defn i{color:var(--ink); font-style:italic; font-weight:600}
   .hero p.sub{font-size:1.18rem; color:var(--muted); margin:20px 0 0; max-width:44ch}
   .hero .cta{display:flex; gap:12px; margin-top:28px; flex-wrap:wrap}
   .hero .meta{margin-top:20px; display:flex; gap:18px; flex-wrap:wrap; font-size:.86rem; color:var(--muted)}
@@ -185,6 +187,7 @@
 <header class="wrap hero">
   <div>
     <span class="pill"><span class="dot"></span>The pharmacogenomics agent</span>
+    <p class="defn"><i>Pharmacogenomics</i> — how your DNA affects which medications work, fail, or hurt you.</p>
     <h1>Ask your genome a <span class="g">straight question.</span></h1>
     <p class="sub">DoseDNA is a chat agent that reads your DNA file on your device and answers in plain language. Behind the conversation sits a deterministic engine — the agent only ever puts words around facts it can prove.</p>
     <div class="cta">
