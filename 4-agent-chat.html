@@ -227,10 +227,10 @@
 
 <div class="strip">
   <div class="wrap row">
-    <span><b>0</b> raw DNA bytes uploaded</span>
+    <span><b>0</b> raw DNA bytes through observed channels</span>
     <span>Only <b>de-identified</b> labels (gene, phenotype, drug name) reach the AI</span>
     <span>Deterministic engine works <b>offline</b></span>
-    <span>Every claim traced to a <b>CPIC</b> tool call</span>
+    <span>Every claim grounded in a <b>CPIC</b> tool call</span>
   </div>
 </div>
 
@@ -278,7 +278,7 @@
       <div class="grow"><span class="y">✓</span><div><b>Says “not determined” out loud</b><span>If your file lacks the deciding variant, it tells you — it never assumes normal.</span></div></div>
       <div class="grow"><span class="n">✕</span><div><b>Never tells you to stop a med</b><span>It hands you questions for a professional, not instructions to act on alone.</span></div></div>
       <div class="grow"><span class="y">✓</span><div><b>Shows its work</b><span>Every answer is tied to a tool call you can see — no hidden reasoning about your health.</span></div></div>
-      <div class="grow"><span class="n">✕</span><div><b>Never uploads your DNA</b><span>Only de-identified {gene, status, drug} ever leave this tab — and each real query is mixed with 5 decoy queries so the provider can’t identify which one is yours.</span></div></div>
+      <div class="grow"><span class="n">✕</span><div><b>Never uploads your DNA</b><span>Only de-identified {gene, status, drug} leave this tab through any channel we observe — and each real query is mixed with 5 decoy queries to make casual log inspection harder. Browser-extension and OS-level data flows are out of scope.</span></div></div>
     </div>
   </div>
 </section>
@@ -464,8 +464,8 @@
     if (decoysSent > 0 && role === "assistant") {
       const decoy = document.createElement("div");
       decoy.className = "decoy-chip";
-      decoy.title = `Your real question was mixed with ${decoysSent} decoy queries drawn at random from our allowlist. The provider can't identify which call was yours.`;
-      decoy.innerHTML = `🛡️ <b>${decoysSent}</b> decoy quer${decoysSent === 1 ? "y" : "ies"} sent alongside · provider can't identify yours`;
+      decoy.title = `Your real question was mixed with ${decoysSent} decoy queries drawn at random from our allowlist. Increases the haystack at the provider's log; not a perfect anonymity guarantee.`;
+      decoy.innerHTML = `🛡️ <b>${decoysSent}</b> decoy quer${decoysSent === 1 ? "y" : "ies"} sent alongside your real query`;
       bubble.appendChild(decoy);
     }
 
