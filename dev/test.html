@@ -1,112 +1,528 @@
-<!--
-  Dev harness for Alex's glue layer. NOT the real UI.
-  Varsha owns index.html; this page exists only so the glue can be
-  smoke-tested before her markup lands. Plain, ugly, functional.
-
-  Run from repo root:
-    python3 -m http.server 8000
-  Then open: http://localhost:8000/dev/test.html
-  Also start the proxy in another terminal:
-    cd server && uvicorn proxy:app --reload --port 8001
--->
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>DoseDNA dev harness</title>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DoseDNA MVP Parser</title>
     <style>
-      body { font-family: system-ui, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 16px; color: #1a1f2b; }
-      h1, h2 { letter-spacing: -0.01em; }
-      section { margin: 24px 0; padding: 16px; border: 1px solid #e1e5ec; border-radius: 8px; }
-      button { padding: 8px 14px; border: 0; border-radius: 6px; background: #1a73e8; color: white; cursor: pointer; }
-      button:disabled { background: #98a8b8; cursor: not-allowed; }
-      .gene-card { padding: 12px; margin: 8px 0; border: 1px solid #e1e5ec; border-radius: 8px; }
-      .gene-card header { display: flex; justify-content: space-between; align-items: center; }
-      .drugs { list-style: none; padding: 0; }
-      .drug { padding: 6px 10px; margin: 4px 0; background: #f6f8fb; border-radius: 4px; }
-      .interaction { padding: 8px 10px; margin: 6px 0; background: #f6f8fb; border-radius: 4px; }
-      .ask { color: #495567; margin-top: 4px; }
-      input[type="text"] { width: 100%; padding: 8px; border: 1px solid #c7cdd6; border-radius: 6px; box-sizing: border-box; }
-      #file-status { color: #495567; margin-top: 8px; }
+        :root {
+            --primary: #0052cc;
+            --primary-hover: #0041a3;
+            --primary-light: #ebf3ff;
+            --text-main: #1c2434;
+            --text-muted: #637381;
+            --bg-body: #f4f7fa;
+            --bg-card: #ffffff;
+            --border-color: #e2e8f0;
+            --success: #10b981;
+            --success-light: #ecfdf5;
+            --error: #ef4444;
+            --error-light: #fef2f2;
+            
+            /* Professional Muted Blue Disclaimer Theme */
+            --disclaimer-bg: #f8fafc;
+            --disclaimer-border: #cbd5e1;
+            --disclaimer-text: #334155;
+            --disclaimer-accent: #0284c7;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            margin: 0;
+            padding: 0;
+            line-height: 1.5;
+        }
+
+        /* Top Header Bar */
+        .app-header {
+            background-color: var(--bg-card);
+            border-bottom: 1px solid var(--border-color);
+            padding: 16px 0;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .header-container {
+            max-width: 760px;
+            margin: 0 auto;
+            padding: 0 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .brand {
+            font-weight: 700;
+            font-size: 20px;
+            color: var(--primary);
+            letter-spacing: -0.5px;
+        }
+
+        .brand span {
+            color: var(--text-main);
+            font-weight: 400;
+        }
+
+        .badge {
+            background-color: var(--primary-light);
+            color: var(--primary);
+            font-size: 12px;
+            font-weight: 600;
+            padding: 4px 8px;
+            border-radius: 4px;
+            text-transform: uppercase;
+        }
+
+        /* Main Layout */
+        .main-container {
+            max-width: 760px;
+            margin: 40px auto;
+            padding: 0 24px;
+            box-sizing: border-box;
+        }
+
+        .intro-text {
+            color: var(--text-muted);
+            font-size: 15px;
+            margin-bottom: 32px;
+        }
+
+        /* Professional Muted Disclaimer Box */
+        .disclaimer-box {
+            background-color: var(--disclaimer-bg);
+            border: 1px solid var(--disclaimer-border);
+            border-left: 4px solid var(--disclaimer-accent);
+            border-radius: 8px;
+            padding: 18px 22px;
+            margin-bottom: 32px;
+            font-size: 14px;
+            color: var(--disclaimer-text);
+            line-height: 1.6;
+        }
+
+        .disclaimer-box strong {
+            display: block;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            color: var(--disclaimer-accent);
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 28px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+        }
+
+        .card h3 {
+            margin-top: 0;
+            margin-bottom: 20px;
+            font-size: 16px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+
+        .form-group { 
+            margin-bottom: 20px; 
+        }
+
+        label { 
+            display: block; 
+            font-weight: 600; 
+            margin-bottom: 8px; 
+            font-size: 14px;
+        }
+
+        /* Modern Custom File Input */
+        input[type="file"] {
+            background: #fafafa;
+            border: 1px dashed #cbd5e1;
+            padding: 14px;
+            cursor: pointer;
+        }
+
+        input[type="text"], input[type="file"] {
+            width: 100%;
+            font-size: 15px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            box-sizing: border-box;
+            transition: all 0.2s ease;
+        }
+
+        input[type="text"] {
+            padding: 12px;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(0, 82, 204, 0.15);
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            font-size: 15px;
+            font-weight: 600;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.15s ease;
+            box-shadow: 0 2px 4px rgba(0, 82, 204, 0.1);
+        }
+
+        button:hover { 
+            background-color: var(--primary-hover); 
+        }
+
+        button:disabled { 
+            background-color: #cbd5e1; 
+            color: #94a3b8;
+            cursor: not-allowed; 
+            box-shadow: none;
+        }
+
+        /* Status & Alert Areas */
+        .status-box {
+            font-size: 14px;
+            font-weight: 500;
+            margin-top: 12px;
+            padding: 10px 14px;
+            border-radius: 6px;
+            display: inline-block;
+        }
+        .status-ready {
+            background-color: var(--success-light);
+            color: var(--success);
+        }
+        .status-error {
+            background-color: var(--error-light);
+            color: var(--error);
+        }
+
+        .help-text {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 6px;
+        }
+
+        /* Pipeline Output Section */
+        #outputCard {
+            margin-top: 32px;
+            padding: 28px;
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-left: 4px solid var(--primary);
+            border-radius: 8px;
+            display: none;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        }
+
+        #outputCard h2 {
+            margin-top: 0;
+            font-size: 18px;
+            color: var(--text-main);
+        }
+
+        #outputCard.error { 
+            border-left-color: var(--error); 
+        }
+
+        .output-disclaimer {
+            font-size: 13px;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border-color);
+            margin-top: 20px;
+            padding-top: 12px;
+        }
+        /* Autocomplete Dropdown Styles */
+.autocomplete-suggestions {
+    position: absolute;
+    border: 1px solid var(--border-color);
+    border-top: none;
+    background: var(--bg-card);
+    max-height: 200px;
+    overflow-y: auto;
+    width: 100%;
+    z-index: 1000;
+    border-radius: 0 0 6px 6px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    box-sizing: border-box;
+}
+
+.suggestion-item {
+    padding: 10px 14px;
+    cursor: pointer;
+    font-size: 14px;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.suggestion-item:last-child {
+    border-bottom: none;
+}
+
+.suggestion-item:hover {
+    background-color: var(--primary-light);
+    color: var(--primary);
+}
+
+.suggestion-item span {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-left: 8px;
+}
     </style>
-  </head>
-  <body>
-    <h1>DoseDNA (dev harness)</h1>
-    <p>This is the unstyled wiring page. Varsha is replacing it with the real UI.</p>
+</head>
+<body>
 
-    <section>
-      <h2>1. Load DNA</h2>
-      <input id="dna-file-input" type="file" accept=".txt,.tsv,.csv" />
-      <button id="demo-load-btn" type="button">Or load bundled sample</button>
-      <button id="mock-load-btn" type="button" style="background:#7b3ed1">Inject mock results (dev)</button>
-      <div id="file-status"></div>
-    </section>
+    <header class="app-header">
+        <div class="header-container">
+            <div class="brand">DoseDNA <span>// Local Processor</span></div>
+            <div class="badge">MVP Client</div>
+        </div>
+    </header>
 
-    <section>
-      <h2>2. Results</h2>
-      <div id="results"></div>
-    </section>
+    <main class="main-container">
+        <p class="intro-text">
+            Select a 23andMe or AncestryDNA data file. The parsing logic executes entirely inside your browser memory; your raw genetic sequences never cross the network.
+        </p>
 
-    <section>
-      <h2>3. Medications check (the novelty)</h2>
-      <p>Enter your current meds (comma separated). The AI cross-references your phenotypes for drug-gene, drug-drug, and phenoconversion flags.</p>
-      <input id="meds-input" type="text" placeholder="e.g. clopidogrel, omeprazole, simvastatin" />
-      <p><button id="meds-check-btn" type="button">Check interactions</button></p>
-      <div id="meds-results"></div>
-    </section>
+        <div class="disclaimer-box">
+            <strong>Clinical Notice & Disclaimer</strong>
+            This tool is provided strictly for educational and informational purposes. It does not constitute medical advice, diagnosis, or treatment. Genetic data processing should not replace a professional clinical consultation. Always review these insights with a qualified physician or pharmacist before adapting any medication regimen, dosage, or therapeutic routine.
+        </div>
 
-    <section>
-      <h2>4. Prepare for your appointment</h2>
-      <button id="doctor-questions-btn" type="button">Prepare questions for my doctor</button>
-      <ul id="doctor-questions"></ul>
-    </section>
+        <div class="card">
+            <h3>1. Load Raw Genome</h3>
+            <div class="form-group">
+                <label for="dnaFile">Choose text file (.txt):</label>
+                <input type="file" id="dnaFile" accept=".txt">
+            </div>
+            <div id="fileStatus" class="status-box" style="display: none;"></div>
+        </div>
 
-    <script type="module" src="../src/main.js"></script>
+       <form id="analysisForm">
+    <div class="card">
+        <h3>2. Run Target Screening</h3>
+        <div class="form-group" style="position: relative;">
+            <label for="drug">Medication You Want to Check:</label>
+            <input type="text" id="drug" placeholder="Start typing a drug name (e.g., Plavix, Lexapro, Warfarin)..." autocomplete="off" required>
+            <div id="autocompleteList" class="autocomplete-suggestions"></div>
+            <div class="help-text">Type either the generic name or common brand name.</div>
+        </div>
+        <button type="submit" id="submitBtn" disabled>Analyze Local Data</button>
+    </div>
+</form>
+
+        <div id="outputCard">
+            <h2>Local Pipeline Output</h2>
+            <div id="outputContent"></div>
+            <div class="output-disclaimer">
+                <em>Consult a licensed healthcare professional to interpret this raw genetic context within your overall treatment plan.</em>
+            </div>
+        </div>
+    </main>
+
     <script>
-      // Mock data injection so Alex can test the AI pipeline without waiting
-      // for the parser + pgx logic. Wires to the dev hook in main.js.
-      document.getElementById("mock-load-btn").addEventListener("click", () => {
-        const mock = [
-          {
-            gene: "CYP2C19",
-            phenotype: "Poor metabolizer",
-            drugs: [
-              { drug: "clopidogrel", flag: "red", recommendation: "Likely ineffective — discuss alternatives" },
-              { drug: "citalopram", flag: "amber", recommendation: "Consider lower starting dose" },
-              { drug: "omeprazole", flag: "green", recommendation: "Standard dosing" },
-            ],
-          },
-          {
-            gene: "CYP2C9",
-            phenotype: "Normal metabolizer",
-            drugs: [
-              { drug: "warfarin", flag: "green", recommendation: "Standard dosing (see VKORC1)" },
-              { drug: "ibuprofen", flag: "green", recommendation: "Standard dosing" },
-            ],
-          },
-          {
-            gene: "VKORC1",
-            phenotype: "Increased warfarin sensitivity",
-            drugs: [{ drug: "warfarin", flag: "amber", recommendation: "Lower starting dose advised" }],
-          },
-          {
-            gene: "SLCO1B1",
-            phenotype: "Decreased function",
-            drugs: [{ drug: "simvastatin", flag: "amber", recommendation: "Lower dose to reduce myopathy risk" }],
-          },
-          {
-            gene: "TPMT",
-            phenotype: "Normal activity",
-            drugs: [{ drug: "azathioprine", flag: "green", recommendation: "Standard dosing" }],
-          },
-          {
-            gene: "CYP2D6",
-            phenotype: "Coverage limited",
-            drugs: [{ drug: "codeine", flag: "gray", recommendation: "Consumer arrays cannot reliably call CYP2D6 — clinical test recommended" }],
-          },
-        ];
-        window.__DOSEDNA_INJECT_MOCK_RESULTS(mock);
-      });
+        // Core Genomics Rules (Section 5 Anchor Specs)
+        // Core Genomics Rules
+const VARIANT_DB = {
+    "rs4244285": { gene: "CYP2C19", allele: "*2", ref: "G", alt: "A" },
+    "rs4986893": { gene: "CYP2C19", allele: "*3", ref: "G", alt: "A" },
+    "rs9923231": { gene: "VKORC1", allele: "sensitivity", ref: "G", alt: "A" }
+}
+
+// Cross-mapping Dictionary (Brand -> Generic and Generic -> Generic)
+const DRUG_MAP = [
+    { primary: "clopidogrel", display: "Clopidogrel", meta: "Brand: Plavix" },
+    { primary: "clopidogrel", display: "Plavix", meta: "Generic: Clopidogrel" },
+    { primary: "citalopram", display: "Citalopram", meta: "Brand: Celexa" },
+    { primary: "citalopram", display: "Celexa", meta: "Generic: Citalopram" },
+    { primary: "escitalopram", display: "Escitalopram", meta: "Brand: Lexapro" },
+    { primary: "escitalopram", display: "Lexapro", meta: "Generic: Escitalopram" },
+    { primary: "warfarin", display: "Warfarin", meta: "Brand: Coumadin" },
+    { primary: "warfarin", display: "Coumadin", meta: "Generic: Warfarin" }
+];
+
+let parsedGenotypes = {};
+let selectedGenericDrug = ""; // Holds the clean clinical identifier
+
+// Handle client-side file ingestion
+document.getElementById('dnaFile').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    const statusBox = document.getElementById('fileStatus');
+    
+    statusBox.style.display = "inline-block";
+    statusBox.className = "status-box"; 
+    statusBox.innerText = "Reading file locally...";
+    
+    reader.onload = function(evt) {
+        const text = evt.target.result;
+        const lines = text.split('\n');
+        parsedGenotypes = {};
+        
+        for (let line of lines) {
+            line = line.trim();
+            if (!line || line.startsWith('#')) continue;
+
+            const parts = line.split(/\s+/);
+            if (parts.length < 4) continue;
+
+            const rsid = parts[0];
+            const genotype = parts[3];
+
+            if (VARIANT_DB[rsid]) {
+                parsedGenotypes[rsid] = genotype;
+            }
+        }
+
+        if (Object.keys(parsedGenotypes).length === 0) {
+            statusBox.classList.add('status-error');
+            statusBox.innerHTML = "❌ File parsed but target rsIDs not found. Is this a standard PGx array variant file?";
+            document.getElementById('submitBtn').disabled = true;
+        } else {
+            statusBox.classList.add('status-ready');
+            statusBox.innerHTML = `✅ Ready. Successfully matched target markers.`;
+            // Only unlock submission if they've also typed a valid medication
+            if(selectedGenericDrug) document.getElementById('submitBtn').disabled = false;
+        }
+    };
+    reader.readAsText(file);
+});
+
+// Autocomplete Interaction Controller
+const drugInput = document.getElementById('drug');
+const autocompleteList = document.getElementById('autocompleteList');
+
+drugInput.addEventListener('input', function() {
+    const value = this.value.trim().toLowerCase();
+    autocompleteList.innerHTML = '';
+    selectedGenericDrug = ""; 
+    document.getElementById('submitBtn').disabled = true;
+
+    if (!value) return;
+
+    const matches = DRUG_MAP.filter(item => 
+        item.display.toLowerCase().includes(value) || 
+        item.meta.toLowerCase().includes(value)
+    );
+
+    matches.forEach(match => {
+        const div = document.createElement('div');
+        div.className = 'suggestion-item';
+        div.innerHTML = `${match.display} <span>(${match.meta})</span>`;
+        
+        div.addEventListener('click', () => {
+            drugInput.value = match.display;
+            selectedGenericDrug = match.primary; // Map to the exact standard generic string
+            autocompleteList.innerHTML = '';
+            
+            // Allow form submission if file is already successfully loaded
+            if (Object.keys(parsedGenotypes).length > 0) {
+                document.getElementById('submitBtn').disabled = false;
+            }
+        });
+        autocompleteList.appendChild(div);
+    });
+});
+
+// Clear dropdown when clicking outside the application box
+document.addEventListener('click', (e) => {
+    if (e.target !== drugInput) autocompleteList.innerHTML = '';
+});
+
+// Form Submission & Rule Engine Pipeline
+document.getElementById('analysisForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!selectedGenericDrug) return;
+    
+    const outputCard = document.getElementById('outputCard');
+    const outputContent = document.getElementById('outputContent');
+
+    outputCard.style.display = "block";
+    outputCard.classList.remove('error');
+    outputContent.innerHTML = "<em>Computing deterministic spine rules locally...</em>";
+
+    let resolvedGene = "Unknown Enzyme Path";
+    let resolvedPhenotype = "Data Checked";
+
+    // Route dynamically based on standard generic normalization string
+    if (selectedGenericDrug === "clopidogrel") {
+        resolvedGene = "CYP2C19";
+        const cyp2c19_2 = parsedGenotypes["rs4244285"];
+        if (cyp2c19_2 === "AA" || cyp2c19_2 === "AG" || cyp2c19_2 === "GA") {
+            resolvedPhenotype = "Poor Metabolizer";
+        } else if (!cyp2c19_2 || cyp2c19_2 === "--" || cyp2c19_2 === "00") {
+            resolvedPhenotype = "Not Determined";
+        } else {
+            resolvedPhenotype = "Normal Metabolizer";
+        }
+    } else if (selectedGenericDrug === "citalopram" || selectedGenericDrug === "escitalopram") {
+        resolvedGene = "CYP2C19";
+        resolvedPhenotype = "Normal Metabolizer"; // Real system would look up *17 ultra-metabolizers
+    } else if (selectedGenericDrug === "warfarin") {
+        resolvedGene = "VKORC1";
+        const vkorc1 = parsedGenotypes["rs9923231"];
+        if (vkorc1 === "AA") {
+            resolvedPhenotype = "High Sensitivity to Warfarin";
+        } else if (vkorc1 === "AG" || vkorc1 === "GA") {
+            resolvedPhenotype = "Moderate Sensitivity to Warfarin";
+        } else {
+            resolvedPhenotype = "Normal Sensitivity";
+        }
+    }
+
+    if (resolvedPhenotype === "Not Determined") {
+        outputContent.innerHTML = `<strong>Status: Not Determined</strong><br>Your file lacks coverage metrics for the required markers. Ask a clinician for a targeted clinical PGx screening array panel.`;
+        return;
+    }
+
+    outputContent.innerHTML += `<br><br><span style="color:var(--text-muted); font-size:14px;"><em>Sending anonymized request (${resolvedGene} + ${resolvedPhenotype}) to local proxy server...</em></span>`;
+
+    try {
+        const response = await fetch('http://127.0.0.1:8000/api/explain', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                gene: resolvedGene,
+                phenotype: resolvedPhenotype,
+                drug: selectedGenericDrug // Safely passes down the mapped clean identity string
+            })
+        });
+
+        if (!response.ok) throw new Error(`HTTP network anomaly error: ${response.status}`);
+        const data = await response.json();
+        outputContent.innerHTML = formatMarkdown(data.explanation);
+
+    } catch (err) {
+        outputCard.classList.add('error');
+        outputContent.innerHTML = `<strong>Local Proxy Fault.</strong><br><span style="color:var(--error);">${err.message}</span><br><br>Confirm your FastAPI server script is actively running on port 8000.`;
+    }
+});
+
+function formatMarkdown(text) {
+    return text
+        .replace(/\n/g, '<br>')
+        .replace(/### (.*?)(<br>|$)/g, '<h3>$1</h3>')
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/\* (.*?)(<br>|$)/g, '<li>$1</li>');
+}
     </script>
-  </body>
+</body>
 </html>

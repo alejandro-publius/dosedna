@@ -1,236 +1,136 @@
-"""
-DoseDNA explanation + reasoning proxy.
-
-Holds the Anthropic API key. Browser calls into here. The proxy NEVER sees
-DNA, rsIDs, or any identifier. Only sees {gene, phenotype, drug, meds[]}.
-
-Run:
-    cd server
-    pip install -r requirements.txt
-    cp .env.example .env  # put your key in
-    uvicorn proxy:app --reload --port 8001
-"""
-
-import json
 import os
-import re
-import sys
-from typing import Literal, Optional
-
-from anthropic import Anthropic, APIError
-from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic import BaseModel, Field
+from dotenv import load_dotenv
 
+# Load environment variables (kept for portfolio structure/port selection)
 load_dotenv()
 
-MODEL = "claude-sonnet-4-6"
-
-if not os.environ.get("ANTHROPIC_API_KEY"):
-    sys.exit("ANTHROPIC_API_KEY not set. Copy .env.example to .env and add a key.")
-
-SENTRY_DSN = os.environ.get("SENTRY_DSN")
-if SENTRY_DSN:
-    import sentry_sdk
-
-    sentry_sdk.init(dsn=SENTRY_DSN, traces_sample_rate=1.0)
-
-EXPLAIN_SYSTEM = (
-    "You explain pharmacogenomic results in plain language for patients. "
-    "Be clear and calm, always recommend confirming with a clinician, and do not "
-    "invent clinical claims beyond the provided result. Keep responses under "
-    "120 words. Do not use medical jargon without immediately defining it. "
-    "End every response with one concrete question the patient could ask "
-    "their doctor or pharmacist."
+app = FastAPI(
+    title="Incogenome Deterministic Local Proxy",
+    description="Anonymized local fallback engine providing clinical explanations with zero external network calls.",
+    version="1.0.0"
 )
 
-QUESTIONS_SYSTEM = (
-    "You generate a short bulleted list of questions a patient could bring to "
-    "their doctor or pharmacist, based on a summary of their pharmacogenomic "
-    "results and current medications. Questions should be specific, actionable, "
-    "and answerable in a clinical visit. Output 4-6 bullets, nothing else. "
-    "Do not give medical advice or make clinical claims."
-)
-
-INTERACTIONS_SYSTEM = (
-    "You analyze potential pharmacogenomic interactions for a patient. "
-    "You are given: their metabolizer phenotypes for a handful of pharmacogenes "
-    "and a list of medications they currently take. "
-    "Flag three categories: "
-    "(1) DRUG-GENE conflicts where a current med is affected by a phenotype; "
-    "(2) DRUG-DRUG interactions between current meds that are well-documented; "
-    "(3) PHENOCONVERSION where one of the meds inhibits or induces a metabolizing "
-    "enzyme, effectively changing the patient's phenotype for other drugs they take "
-    "(e.g. a strong CYP2C19 inhibitor making a normal metabolizer behave as poor). "
-    "Format output as JSON with keys: drug_gene, drug_drug, phenoconversion. "
-    "Each value is an array of {flag, severity, explanation, ask_clinician}. "
-    "severity is one of: info, caution, avoid. "
-    "Be conservative. Only flag things with documented evidence. If nothing to "
-    "flag in a category, return an empty array for it. Output ONLY the JSON object "
-    "with no surrounding text or markdown fences. If you cannot answer, return "
-    '{"drug_gene":[], "drug_drug":[], "phenoconversion":[]}.'
-)
-
-app = FastAPI(title="DoseDNA proxy")
-
-# Any localhost / 127.0.0.1 origin works. Any external origin is blocked.
+# Configure CORS for localhost development/demo
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
-    allow_methods=["POST", "GET"],
-    allow_headers=["*"],
+    allow_origins=[
+        "http://localhost:3000", 
+        "http://127.0.0.1:3000",
+        "http://localhost:5500",  # Added for VS Code Live Server
+        "http://127.0.0.1:5500",  # Added for VS Code Live Server
+        "null"
+    ],
+    allow_credentials=True,
+    allow_methods=["POST", "OPTIONS"],
+    allow_headers=["Content-Type"],
 )
 
-client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-
-
-class ExplainRequest(BaseModel):
-    gene: str = Field(..., max_length=20)
-    phenotype: str = Field(..., max_length=40)
-    drug: str = Field(..., max_length=60)
-
-
-class ExplainResponse(BaseModel):
-    explanation: str
-    source: Literal["claude", "fallback"]
-
-
-class PhenotypeSummary(BaseModel):
-    gene: str = Field(..., max_length=20)
-    phenotype: str = Field(..., max_length=40)
-
-
-class QuestionsRequest(BaseModel):
-    phenotypes: list[PhenotypeSummary] = Field(..., max_length=20)
-    medications: list[str] = Field(default_factory=list, max_length=30)
-
-
-class QuestionsResponse(BaseModel):
-    questions: list[str]
-
-
-class InteractionsRequest(BaseModel):
-    phenotypes: list[PhenotypeSummary] = Field(..., max_length=20)
-    medications: list[str] = Field(..., min_length=1, max_length=30)
-
-
-SEVERITY_MAP = {
-    "warning": "caution",
-    "warn": "caution",
-    "moderate": "caution",
-    "high": "avoid",
-    "severe": "avoid",
-    "low": "info",
-    "minor": "info",
+# -------------------------------------------------------------------------
+# Local Clinical Explanation Database (Deterministic Source of Truth)
+# -------------------------------------------------------------------------
+LOCAL_CLINICAL_DB = {
+    "cyp2c19": {
+        "poor metabolizer": {
+            "clopidogrel": (
+                "Your body processes this drug much slower than standard. Because **Clopidogrel** is a prodrug, "
+                "it relies entirely on the CYP2C19 enzyme to activate it. With poor metabolizer status, "
+                "the medication may not be fully activated, which drastically reduces its effectiveness in preventing blood clots.\n\n"
+                "### Questions for Your Doctor:\n"
+                "* Should we consider an alternative antiplatelet medication, such as Prasugrel or Ticagrelor, that doesn't rely as heavily on the CYP2C19 pathway?"
+            ),
+            "citalopram": (
+                "Your body clears this medication much slower than expected. **Citalopram** is an active drug, meaning "
+                "it stays active until broken down. Because your breakdown path is restricted, the drug can quickly accumulate "
+                "in your bloodstream, drastically increasing your risk of adverse side effects.\n\n"
+                "### Questions for Your Doctor:\n"
+                "* Given my slower metabolism rate for this drug family, should we consider dropping the starting dosage?"
+            )
+        }
+    },
+    "cyp2c9": {
+        "poor metabolizer": {
+            "warfarin": (
+                "Your system clears **Warfarin** exceptionally slowly. Because the drug stays active in your blood far longer, "
+                "standard therapeutic dosages present a high risk of over-coagulation and severe internal bleeding hazards.\n\n"
+                "### Questions for Your Doctor:\n"
+                "* Should we adjust my initial baseline Warfarin dosage significantly downward to accommodate this pathway limitation?"
+            )
+        }
+    }
 }
 
+# -------------------------------------------------------------------------
+# Pydantic Schemas for Strict Input/Output Validation
+# -------------------------------------------------------------------------
+class ExplanationRequest(BaseModel):
+    gene: str = Field(..., example="CYP2C19", description="The gene identifier")
+    phenotype: str = Field(..., example="Poor Metabolizer", description="The deterministic phenotype outcome")
+    drug: str = Field(..., example="Clopidogrel", description="The specific medication name")
 
-class Flag(BaseModel):
-    flag: str
-    severity: Literal["info", "caution", "avoid"]
-    explanation: str
-    ask_clinician: str = ""
+    class Config:
+        extra = "forbid"
 
-    @field_validator("severity", mode="before")
-    @classmethod
-    def coerce_severity(cls, v):
-        if not isinstance(v, str):
-            return "caution"
-        v = v.lower().strip()
-        if v in {"info", "caution", "avoid"}:
-            return v
-        return SEVERITY_MAP.get(v, "caution")
+class ExplanationResponse(BaseModel):
+    explanation: str = Field(..., description="The plain-language markdown explanation generated locally")
 
-
-class InteractionsResponse(BaseModel):
-    drug_gene: list[Flag] = Field(default_factory=list)
-    drug_drug: list[Flag] = Field(default_factory=list)
-    phenoconversion: list[Flag] = Field(default_factory=list)
-
-
-JSON_FENCE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
-JSON_OBJECT = re.compile(r"\{[\s\S]*\}")
-
-
-def _extract_json(text: str) -> Optional[str]:
-    fence = JSON_FENCE.search(text)
-    if fence:
-        return fence.group(1)
-    brace = JSON_OBJECT.search(text)
-    return brace.group(0) if brace else None
-
-
-def _call_claude(system_text: str, user_message: str, max_tokens: int = 500) -> str:
+# -------------------------------------------------------------------------
+# Core API Endpoint
+# -------------------------------------------------------------------------
+@app.post(
+    "/api/explain", 
+    response_model=ExplanationResponse, 
+    status_code=status.HTTP_200_OK
+)
+async def explain_pgx_result(request: ExplanationRequest):
+    # Shifting execution context inside an explicit try/except safety block
     try:
-        response = client.messages.create(
-            model=MODEL,
-            max_tokens=max_tokens,
-            system=system_text,
-            messages=[{"role": "user", "content": user_message}],
+        clean_gene = request.gene.strip().lower()
+        clean_phenotype = request.phenotype.strip().lower()
+        clean_drug = request.drug.strip().lower()
+        
+        disclaimer = (
+            "**[IMPORTANT CLINICAL DISCLAIMER]:** This is an informational screening compiled directly from "
+            "raw data file signatures. It does not replace professional medical advice. Always consult your doctor "
+            "or clinical pharmacist before making any adjustments to your medication routines.\n\n---\n\n"
         )
-    except APIError as exc:
-        raise HTTPException(status_code=503, detail="upstream model error") from exc
-    return "".join(b.text for b in response.content if b.type == "text").strip()
 
+        # 1. Look up the gene pathway first
+        gene_entry = LOCAL_CLINICAL_DB.get(clean_gene)
+        
+        if not gene_entry:
+            return ExplanationResponse(
+                explanation=f"{disclaimer}### Medication Coverage Notice\n"
+                f"Incogenome currently does not contain verified pharmacogenomic rules for **{request.drug.title()}**. "
+                "As a result, we cannot map this medication to your genetic file signatures.\n\n"
+                "*What you can do:* Speak with your pharmacist or doctor to see if targeted clinical-grade PGx testing (such as a multi-gene panel) is appropriate for your medication history."
+            )
 
-@app.get("/")
-def health() -> dict:
-    return {"ok": True, "model": MODEL}
+        # 2. Look up the specific drug within that pathway
+        raw_text = gene_entry.get(clean_phenotype, {}).get(clean_drug)
+        
+        if not raw_text:
+            return ExplanationResponse(
+                explanation=f"{disclaimer}### Medication Not Supported\n"
+                f"While we parsed markers related to the **{request.gene.upper()}** pathway, **{request.drug.title()}** is not supported in the current local rule base.\n\n"
+                "No data has been generated. Please consult a licensed clinician before altering any medication routines."
+            )
+            
+        return ExplanationResponse(explanation=f"{disclaimer}{raw_text}")
 
+    except Exception as e:
+        print(f"[Local Processing Error]: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server processing fault within the explanation builder."
+        )
 
-@app.post("/api/explain", response_model=ExplainResponse)
-def explain(req: ExplainRequest) -> ExplainResponse:
-    user_message = (
-        f"Explain in simple terms what it means to be a {req.gene} "
-        f"{req.phenotype} taking {req.drug}, and what to ask the doctor."
-    )
-    text = _call_claude(EXPLAIN_SYSTEM, user_message)
-    return ExplainResponse(explanation=text, source="claude")
-
-
-@app.post("/api/questions", response_model=QuestionsResponse)
-def questions(req: QuestionsRequest) -> QuestionsResponse:
-    pheno_lines = "\n".join(f"- {p.gene}: {p.phenotype}" for p in req.phenotypes)
-    meds = ", ".join(req.medications) if req.medications else "(none provided)"
-    user_message = (
-        "Pharmacogenomic phenotypes:\n"
-        f"{pheno_lines}\n\n"
-        f"Current medications: {meds}\n\n"
-        "Generate 4-6 specific questions this patient should bring to their "
-        "doctor or pharmacist. Format as bullet points."
-    )
-    text = _call_claude(QUESTIONS_SYSTEM, user_message, max_tokens=500)
-    bullets = []
-    for line in text.splitlines():
-        stripped = line.strip()
-        if not stripped:
-            continue
-        if stripped[0] in "-*•":
-            bullets.append(stripped.lstrip("-*• ").strip())
-        elif re.match(r"^\d+[.)]\s+", stripped):
-            bullets.append(re.sub(r"^\d+[.)]\s+", "", stripped))
-    if not bullets:
-        # Last resort: split on sentence-ish boundaries.
-        bullets = [s.strip() for s in re.split(r"(?<=[.?])\s+", text) if s.strip()]
-    return QuestionsResponse(questions=bullets[:6])
-
-
-@app.post("/api/check-meds", response_model=InteractionsResponse)
-def check_meds(req: InteractionsRequest) -> InteractionsResponse:
-    pheno_lines = "\n".join(f"- {p.gene}: {p.phenotype}" for p in req.phenotypes)
-    user_message = (
-        "Pharmacogenomic phenotypes:\n"
-        f"{pheno_lines}\n\n"
-        f"Current medications: {', '.join(req.medications)}\n\n"
-        "Return the JSON object as specified."
-    )
-    text = _call_claude(INTERACTIONS_SYSTEM, user_message, max_tokens=2000)
-    extracted = _extract_json(text)
-    if not extracted:
-        # Refusal or unparseable — return empty result; client renders "no flags".
-        return InteractionsResponse()
-    try:
-        return InteractionsResponse(**json.loads(extracted))
-    except (ValueError, ValidationError):
-        return InteractionsResponse()
+# -------------------------------------------------------------------------
+# Execution entrypoint
+# -------------------------------------------------------------------------
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run("proxy:app", host="127.0.0.1", port=port, reload=True)
