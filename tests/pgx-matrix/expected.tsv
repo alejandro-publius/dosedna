@@ -1,0 +1,19 @@
+gene	drug	expected_outcome
+CYP2C19	clopidogrel	Poor metabolizers have reduced antiplatelet activation; alternative therapy recommended (ticagrelor or prasugrel). Source: TAILOR-PCI (JAMA 2020), CPIC clopidogrel + CYP2C19.
+CYP2C19	omeprazole	Poor metabolizers have increased plasma exposure and higher acid suppression; ultrarapid metabolizers may have reduced efficacy at standard dose. Source: CPIC PPIs + CYP2C19.
+CYP2C19	voriconazole	Rapid and ultrarapid metabolizers achieve subtherapeutic troughs; alternative antifungal recommended or therapeutic drug monitoring with dose increase. Source: Hicks et al. CPT 2017, CPIC voriconazole.
+CYP2C19	citalopram	Poor metabolizers have increased exposure and QT prolongation risk; reduce starting dose by 50% or consider alternative SSRI. Source: CPIC SSRIs + CYP2C19.
+CYP2C19	escitalopram	Poor metabolizers have increased exposure and side-effect burden; reduce starting dose by 50% or consider alternative SSRI. Source: Bishop et al. Frontiers Pharmacology 2019, CPIC SSRIs.
+CYP2C9	warfarin	Poor metabolizers need substantially lower starting dose; genotype-guided dosing improves time in therapeutic INR range. Source: EU-PACT (NEJM 2013), CPIC warfarin.
+CYP2C9	ibuprofen	Poor metabolizers have increased exposure and elevated GI bleeding risk; use lowest effective dose or alternative NSAID. Source: CPIC NSAIDs + CYP2C9.
+CYP2C9	phenytoin	Poor metabolizers need reduced maintenance dose to avoid toxicity at standard doses. Source: CPIC phenytoin + CYP2C9.
+VKORC1	warfarin	-1639 A/A genotype confers increased warfarin sensitivity; lower starting dose required. Source: EU-PACT (NEJM 2013), CPIC warfarin + VKORC1.
+SLCO1B1	atorvastatin	Decreased/poor function increases statin exposure and myopathy risk; consider lower dose or alternative statin. Source: CPIC statins + SLCO1B1.
+SLCO1B1	rosuvastatin	Decreased/poor function increases statin exposure and myopathy risk; lower starting dose recommended. Source: CPIC statins + SLCO1B1.
+SLCO1B1	simvastatin	Poor function carries ~18% cumulative myopathy risk at 80 mg/day; alternative statin or lower dose required. Source: SEARCH (NEJM 2008), CPIC statins + SLCO1B1.
+TPMT	azathioprine	Deficient activity causes life-threatening myelosuppression at standard doses; avoid or use drastically reduced dose with close monitoring. Source: Colombel et al. Gastroenterology 2000, CPIC thiopurines + TPMT.
+TPMT	mercaptopurine	Deficient activity causes life-threatening myelosuppression at standard doses; avoid or drastically reduce dose. Source: CPIC thiopurines + TPMT.
+TPMT	thioguanine	Deficient activity causes life-threatening myelosuppression at standard doses; avoid or drastically reduce dose. Source: CPIC thiopurines + TPMT.
+CYP2D6	codeine	Poor metabolizers have inadequate analgesia (no morphine activation); ultrarapid metabolizers have toxicity risk; alternative non-CYP2D6 opioid recommended. Source: CPIC opioids + CYP2D6.
+CYP2D6	tamoxifen	Poor metabolizers have reduced endoxifen (active metabolite) formation; alternative endocrine therapy may be considered. Source: CPIC tamoxifen + CYP2D6.
+CYP2D6	tramadol	Poor metabolizers have inadequate analgesia (cannot bioactivate to O-desmethyltramadol); alternative non-CYP2D6 opioid recommended. Source: Smith et al. Genetics in Medicine 2019, CPIC opioids + CYP2D6.
