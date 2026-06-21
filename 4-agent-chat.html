@@ -314,6 +314,7 @@
   let conversation = []; // [{role, content}]
   let phenoRowEl = null;
   let worker = null;
+  let currentFileName = null;
 
   function setStatus(text, kind = "") {
     statusEl.textContent = text;
@@ -420,7 +421,8 @@
     worker.onmessage = async (event) => {
       const { type } = event.data;
       if (type === "result") {
-        setStatus(`Parsed ${Object.keys(event.data.genotypes).length} target SNPs locally`, "ok");
+        const snpCount = Object.keys(event.data.genotypes).length;
+        setStatus(`Parsed ${snpCount} target SNPs locally`, "ok");
         try {
           const { genotypesToResults } = await import("./src/pgx.js");
           const results = await genotypesToResults(event.data.genotypes);
@@ -430,6 +432,20 @@
           }));
           renderPhenotypeRow();
           enableChat();
+          // Visible confirmation in the chat — purely UI, not added to the
+          // conversation history sent to the model (so the assistant doesn't
+          // think this was a real chat turn).
+          renderMessage(
+            "user",
+            `📎 ${currentFileName || "Sample DNA file"} loaded`,
+          );
+          const summary = phenotypes
+            .map((p) => `- ${p.gene}: ${p.phenotype}`)
+            .join("\n");
+          renderMessage(
+            "assistant",
+            `Read your file locally — ${snpCount} target variants found, your raw DNA never left this tab. The deterministic engine called these phenotypes:\n${summary}\n\nReady — ask about any medication.`,
+          );
         } catch (err) {
           setStatus("PGx engine failed: " + (err.message || err), "err");
         }
@@ -443,6 +459,7 @@
   }
 
   loadSampleBtn.addEventListener("click", async () => {
+    currentFileName = "sample_23andme.txt (bundled demo file)";
     setStatus("Loading bundled sample…");
     try {
       const res = await fetch("./sample/sample_23andme.txt");
@@ -458,6 +475,7 @@
   fileInput.addEventListener("change", (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    currentFileName = file.name;
     setStatus(`Reading ${file.name} locally…`);
     const reader = new FileReader();
     reader.onload = () => {
