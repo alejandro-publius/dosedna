@@ -464,8 +464,8 @@
     if (decoysSent > 0 && role === "assistant") {
       const decoy = document.createElement("div");
       decoy.className = "decoy-chip";
-      decoy.title = `Your real question was mixed with ${decoysSent} decoy queries drawn at random from our allowlist. Increases the haystack at the provider's log; not a perfect anonymity guarantee.`;
-      decoy.innerHTML = `🛡️ <b>${decoysSent}</b> decoy quer${decoysSent === 1 ? "y" : "ies"} sent alongside your real query`;
+      decoy.title = `Your real question was mixed with ${decoysSent} decoy queries — same model, same system prompt, same tool schema — so individual requests look interchangeable in the provider's log. Round-count of a full tool-use loop is still a tell; honest about that.`;
+      decoy.innerHTML = `🛡️ <b>${decoysSent}</b> tool-shape-matched decoys sent alongside your real query`;
       bubble.appendChild(decoy);
     }
 

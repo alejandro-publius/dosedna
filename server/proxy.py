@@ -983,16 +983,26 @@ _DECOY_TEMPLATES = [
 def _fire_one_decoy(message: str) -> None:
     """Fire a single decoy chat call and discard the response.
 
-    Uses the same model + same CHAT_SYSTEM as a real chat turn so the call
-    is size- and shape-indistinguishable to a passive observer at the
-    Anthropic API gateway. No tools attached — keeps cost down and the
-    response is discarded regardless.
+    Uses the same model, same CHAT_SYSTEM, and the same CHAT_TOOLS as a
+    real chat turn so the request body is shape- and tool-schema-
+    indistinguishable from a real first-turn call. We do NOT execute any
+    tool the model requests — the response (whether text or a tool_use
+    block) is read once and discarded. The provider sees a normal
+    "user asks a PGx question, model may or may not request a tool" call
+    that looks like every other first turn this proxy fires.
+
+    The remaining tell to a sophisticated observer is round count: real
+    queries typically run a 2-3 round tool-use loop, decoys terminate
+    after round 1. Closing that gap would cost ~3x more per decoy; we
+    accept it as a known limit and disclose it in the README's Privacy
+    posture section.
     """
     try:
         client.messages.create(
             model=MODEL,
             max_tokens=400,
             system=CHAT_SYSTEM,
+            tools=CHAT_TOOLS,
             messages=[{"role": "user", "content": message}],
         )
     except Exception:
