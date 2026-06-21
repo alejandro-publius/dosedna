@@ -101,8 +101,12 @@
 
   /* CPIC evidence-strength chips inside assistant bubbles */
   .cpic-chips{display:flex; gap:6px; flex-wrap:wrap; margin:8px 0 4px}
-  .cpic-chip{font-size:.74rem; padding:4px 9px; border-radius:999px; border:1px solid transparent; font-family:"JetBrains Mono",ui-monospace,monospace}
+  .cpic-chip{font-size:.74rem; padding:4px 9px; border-radius:999px; border:1px solid transparent; font-family:"JetBrains Mono",ui-monospace,monospace; text-decoration:none; display:inline-flex; align-items:center; gap:4px; transition:transform .1s ease, box-shadow .15s ease}
+  .cpic-chip:hover{transform:translateY(-1px); box-shadow:0 2px 6px rgba(15,23,41,.08)}
+  .cpic-chip:focus-visible{outline:2px solid var(--azure); outline-offset:2px}
   .cpic-chip b{font-weight:700; margin-right:2px}
+  .cpic-chip .cpic-arrow{font-size:.78rem; margin-left:3px; opacity:.65}
+  .cpic-chip:hover .cpic-arrow{opacity:1}
   .cpic-chip-strong{background:#ecfdf5; color:#065f46; border-color:#a7f3d0}
   .cpic-chip-moderate{background:#fef3c7; color:#92400e; border-color:#fde68a}
   .cpic-chip-optional{background:#f1f5f9; color:#475569; border-color:#cbd5e1}
@@ -372,7 +376,9 @@
 
     // CPIC evidence-strength chips — rendered above the tool-call cards so
     // they read as a quick provenance summary. Color tier: Strong → green,
-    // Moderate → amber, Optional → gray, anything else → neutral.
+    // Moderate → amber, Optional → gray, anything else → neutral. Each chip
+    // is a link to ClinPGx's per-(gene, drug) CPIC guideline page so a judge
+    // can click straight to the authoritative source.
     if (cpicEvidence && cpicEvidence.length) {
       const chips = document.createElement("div");
       chips.className = "cpic-chips";
@@ -384,9 +390,14 @@
             : (e.classification || "").toLowerCase().includes("optional")
               ? "optional"
               : "neutral";
-        const chip = document.createElement("span");
+        const href = `https://www.clinpgx.org/cpic/guidelines/${encodeURIComponent(e.gene)}/${encodeURIComponent((e.drug || "").toLowerCase())}`;
+        const chip = document.createElement("a");
         chip.className = `cpic-chip cpic-chip-${cls}`;
-        chip.innerHTML = `<b>CPIC ${escapeHtml(e.classification || "")}</b> · ${escapeHtml(e.gene)} + ${escapeHtml(e.drug)} (${escapeHtml(e.phenotype)})`;
+        chip.href = href;
+        chip.target = "_blank";
+        chip.rel = "noopener noreferrer";
+        chip.title = `Open CPIC guideline for ${e.gene} + ${e.drug} on ClinPGx`;
+        chip.innerHTML = `<b>CPIC ${escapeHtml(e.classification || "")}</b> · ${escapeHtml(e.gene)} + ${escapeHtml(e.drug)} (${escapeHtml(e.phenotype)})<span class="cpic-arrow" aria-hidden="true">↗</span>`;
         chips.appendChild(chip);
       }
       bubble.appendChild(chips);
