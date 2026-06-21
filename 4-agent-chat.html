@@ -52,7 +52,10 @@
   .chat .bar .mark{width:22px;height:22px;color:var(--azure)}
   .chat .bar .t{font-weight:700; font-size:.95rem} .chat .bar .t span{color:var(--muted); font-weight:500}
   .chat .bar .lock{margin-left:auto; font-size:.74rem; color:var(--green); font-weight:600; display:flex; align-items:center; gap:6px; background:#e7f7ef; padding:5px 11px; border-radius:999px}
-  .stream{padding:22px 18px; display:flex; flex-direction:column; gap:16px; max-height:560px; overflow:hidden; background:linear-gradient(#fff,#fbfcff)}
+  .stream{padding:22px 18px; display:flex; flex-direction:column; gap:16px; max-height:560px; overflow-y:auto; scroll-behavior:smooth; background:linear-gradient(#fff,#fbfcff)}
+  .stream::-webkit-scrollbar{width:8px}
+  .stream::-webkit-scrollbar-thumb{background:#cbd5e1; border-radius:4px}
+  .stream::-webkit-scrollbar-thumb:hover{background:#94a3b8}
   .msg{display:flex; gap:11px; max-width:92%}
   .msg .av{width:30px;height:30px;border-radius:9px; flex:none; display:grid; place-items:center; font-size:.74rem; font-weight:700}
   .msg.u{align-self:flex-end; flex-direction:row-reverse}
