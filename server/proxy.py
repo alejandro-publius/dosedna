@@ -172,7 +172,7 @@ def _reject_dna_shaped(s: str) -> str:
 
 load_dotenv()
 
-MODEL = "claude-haiku-4-5"
+MODEL = "claude-opus-4-8"
 
 if not os.environ.get("ANTHROPIC_API_KEY"):
     sys.exit("ANTHROPIC_API_KEY not set. Copy .env.example to .env and add a key.")
@@ -517,7 +517,10 @@ app = FastAPI(title="DoseDNA proxy")
 # Any localhost / 127.0.0.1 origin works. Any external origin is blocked.
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+    allow_origin_regex=(
+        r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+        r"|^https://alejandro-publius\.github\.io$"
+    ),
     allow_methods=["POST", "GET", "OPTIONS"],
     allow_headers=["*"],
 )
