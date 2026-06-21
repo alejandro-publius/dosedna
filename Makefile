@@ -1,4 +1,4 @@
-.PHONY: install proxy web all clean smoketest test pgx-test parser-test getrm agent-test
+.PHONY: install proxy web all clean smoketest test pgx-test parser-test getrm agent-test pgxqa-test
 
 install:
 	cd server && pip install -r requirements.txt
@@ -25,6 +25,9 @@ getrm:
 
 agent-test:
 	@node tests/agent.test.mjs
+
+pgxqa-test:
+	@node tests/pgxqa.test.mjs
 
 smoketest:
 	@bash scripts/smoketest.sh
