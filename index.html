@@ -153,6 +153,30 @@
   .grow .y{color:var(--green); font-weight:800; flex:none} .grow .n{color:var(--red); font-weight:800; flex:none}
   .grow b{display:block; font-size:.96rem} .grow span{color:var(--muted); font-size:.88rem}
 
+  /* "One status. Two drugs. Opposite advice." — ported from Lindsay's variation-2 */
+  .why-bg{background:#fff; border-top:1px solid var(--line); border-bottom:1px solid var(--line); padding:64px 0}
+  .contrast{display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-top:34px; max-width:900px; margin-left:auto; margin-right:auto}
+  @media(max-width:760px){.contrast{grid-template-columns:1fr}}
+  .cc{border:1px solid var(--line); border-radius:16px; overflow:hidden; background:var(--card)}
+  .cc .cct{padding:14px 18px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; font-weight:700; gap:8px; flex-wrap:wrap}
+  .cc .cct .type{font-size:.74rem; font-weight:600; color:var(--muted)}
+  .cc .ccb{padding:18px}
+  .cc .dir{font-size:1.5rem; font-weight:800; margin-bottom:6px}
+  .cc.red .dir{color:#dc2626} .cc.amber .dir{color:#b45309}
+  .cc .ccb p{margin:0; color:var(--muted); font-size:.95rem} .cc .ccb p b{color:var(--ink)}
+  .cc .pin{display:inline-block; margin-top:12px; font-size:.74rem; font-weight:700; padding:4px 10px; border-radius:7px}
+  .cc.red .pin{background:#fdecec; color:#dc2626} .cc.amber .pin{background:#fdf3e3; color:#b45309}
+  .sharebar{max-width:900px; margin:18px auto 0; text-align:center; font-size:.92rem; color:var(--muted); background:#f7f9fc; border:1px solid var(--line); border-radius:12px; padding:14px 18px}
+  .sharebar b{color:var(--ink)}
+
+  /* Privacy table — ported from Lindsay's variation-2 */
+  .ptable{max-width:760px; margin:34px auto 0; border:1px solid var(--line); border-radius:14px; overflow:hidden; background:var(--card)}
+  .ptable .pr{display:flex; justify-content:space-between; align-items:center; padding:14px 20px; border-top:1px solid var(--line); font-size:.95rem; gap:12px}
+  .ptable .pr:first-child{border-top:0; background:#fbfcfe; font-weight:700; font-size:.78rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted)}
+  .ptable .no{color:var(--muted); text-decoration:line-through; text-align:right}
+  .ptable .ok{color:#059669; font-weight:600; text-align:right}
+  .pnote{max-width:760px; margin:16px auto 0; text-align:center; color:var(--muted); font-size:.92rem}
+
   .cta-band{background:linear-gradient(135deg,#1d4ed8,#3b82f6 60%,#6366f1); color:#fff; border-radius:24px; padding:54px 40px; text-align:center; margin:64px 0}
   .cta-band h2{font-size:clamp(1.9rem,4vw,2.8rem); font-weight:800; letter-spacing:-.02em; margin:0}
   .cta-band p{color:#dbe6ff; max-width:46ch; margin:14px auto 0; font-size:1.08rem}
@@ -270,6 +294,32 @@
   </div>
 </section>
 
+<section class="why-bg" id="why">
+  <div class="wrap">
+    <h2 class="h2">One status. Two drugs. Opposite advice.</h2>
+    <p class="lede">Your CYP450 enzymes process almost every prescription drug. The same slow enzyme helps one medication and harms another — so a single "normal/abnormal" label is dangerously incomplete.</p>
+    <div class="contrast">
+      <div class="cc red">
+        <div class="cct"><span>Clopidogrel</span><span class="type">Prodrug · must be switched on</span></div>
+        <div class="ccb">
+          <div class="dir">↓ under-activated</div>
+          <p>A poor metabolizer activates too little of the drug. It may be <b>less effective</b> at preventing clots.</p>
+          <span class="pin">Effectiveness flag</span>
+        </div>
+      </div>
+      <div class="cc amber">
+        <div class="cct"><span>Escitalopram</span><span class="type">Active drug · must be cleared</span></div>
+        <div class="ccb">
+          <div class="dir">↑ under-cleared</div>
+          <p>The same slow enzyme clears the drug too slowly, so it can <b>build up</b> toward toxicity.</p>
+          <span class="pin">Accumulation flag</span>
+        </div>
+      </div>
+    </div>
+    <div class="sharebar">Same gene <b>CYP2C19</b>, same <b>poor-metabolizer</b> status — opposite actions. DoseDNA encodes the <b>direction</b> of risk, and never quietly rounds a missing result up to "normal."</div>
+  </div>
+</section>
+
 <section class="block" id="guard" style="padding-top:0">
   <div class="wrap">
     <h2 class="h2">An agent that knows what it isn't.</h2>
@@ -283,6 +333,22 @@
       <div class="grow"><span class="y">✓</span><div><b>Shows its work</b><span>Every answer is tied to a tool call you can see — no hidden reasoning about your health.</span></div></div>
       <div class="grow"><span class="n">✕</span><div><b>Never uploads your DNA</b><span>Only de-identified {gene, status, drug} leave this tab through any channel we observe — and each real query is mixed with 5 decoy queries to make casual log inspection harder. Browser-extension and OS-level data flows are out of scope.</span></div></div>
     </div>
+  </div>
+</section>
+
+<section class="block" id="data-path" style="padding-top:0">
+  <div class="wrap">
+    <h2 class="h2">Your DNA is read here, and stays here.</h2>
+    <p class="lede">Selecting a file is not uploading it. DoseDNA parses your data in a Web Worker on your device. Only a minimal de-identified question can ever leave — and even that gets mixed with 5 decoy queries so the provider can't tell which one is yours.</p>
+    <div class="ptable">
+      <div class="pr"><span>What happens to…</span><span>Where it goes</span></div>
+      <div class="pr"><span>Your raw DNA file</span><span class="no">never sent</span></div>
+      <div class="pr"><span>Your rsIDs &amp; genotypes</span><span class="no">never sent</span></div>
+      <div class="pr"><span>Your diplotype</span><span class="no">never sent</span></div>
+      <div class="pr"><span>{ gene, phenotype, drug } — 3 labels</span><span class="ok">mixed with 5 decoys</span></div>
+      <div class="pr"><span>DNA bytes through observed channels</span><span class="ok">0</span></div>
+    </div>
+    <p class="pnote">Guidance is sourced live from <b>CPIC</b> — the same peer-reviewed gene-drug guidelines clinical pharmacists apply by hand.</p>
   </div>
 </section>
 
