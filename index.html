@@ -377,9 +377,25 @@
     // CPIC evidence-strength chips — rendered above the tool-call cards so
     // they read as a quick provenance summary. Color tier: Strong → green,
     // Moderate → amber, Optional → gray, anything else → neutral. Each chip
-    // is a link to ClinPGx's per-(gene, drug) CPIC guideline page so a judge
-    // can click straight to the authoritative source.
+    // is a link to the specific CPIC guideline page when we have a verified
+    // URL, falling back to CPIC's master guidelines index otherwise. Every
+    // entry below was HTTP-checked against cpicpgx.org's live content (not
+    // just the status code — their site returns 200 for the React 404 page).
     if (cpicEvidence && cpicEvidence.length) {
+      const CPIC_URLS = {
+        "CYP2C19+clopidogrel":   "https://cpicpgx.org/guidelines/guideline-for-clopidogrel-and-cyp2c19/",
+        "CYP2C19+omeprazole":    "https://cpicpgx.org/guidelines/cpic-guideline-for-proton-pump-inhibitors-and-cyp2c19/",
+        "CYP2C19+voriconazole":  "https://cpicpgx.org/guidelines/guideline-for-voriconazole-and-cyp2c19/",
+        "CYP2C9+phenytoin":      "https://cpicpgx.org/guidelines/guideline-for-phenytoin-and-cyp2c9/",
+        "CYP2D6+codeine":        "https://cpicpgx.org/guidelines/guideline-for-codeine-and-cyp2d6/",
+        "SLCO1B1+atorvastatin":  "https://cpicpgx.org/guidelines/cpic-guideline-for-statins/",
+        "SLCO1B1+rosuvastatin":  "https://cpicpgx.org/guidelines/cpic-guideline-for-statins/",
+        "SLCO1B1+simvastatin":   "https://cpicpgx.org/guidelines/cpic-guideline-for-statins/",
+        "TPMT+azathioprine":     "https://cpicpgx.org/guidelines/guideline-for-thiopurines-and-tpmt/",
+        "TPMT+mercaptopurine":   "https://cpicpgx.org/guidelines/guideline-for-thiopurines-and-tpmt/",
+        "TPMT+thioguanine":      "https://cpicpgx.org/guidelines/guideline-for-thiopurines-and-tpmt/",
+      };
+      const CPIC_FALLBACK = "https://cpicpgx.org/guidelines/";
       const chips = document.createElement("div");
       chips.className = "cpic-chips";
       for (const e of cpicEvidence) {
@@ -390,13 +406,17 @@
             : (e.classification || "").toLowerCase().includes("optional")
               ? "optional"
               : "neutral";
-        const href = `https://www.clinpgx.org/cpic/guidelines/${encodeURIComponent(e.gene)}/${encodeURIComponent((e.drug || "").toLowerCase())}`;
+        const key = `${e.gene}+${(e.drug || "").toLowerCase()}`;
+        const href = CPIC_URLS[key] || CPIC_FALLBACK;
+        const specific = !!CPIC_URLS[key];
         const chip = document.createElement("a");
         chip.className = `cpic-chip cpic-chip-${cls}`;
         chip.href = href;
         chip.target = "_blank";
         chip.rel = "noopener noreferrer";
-        chip.title = `Open CPIC guideline for ${e.gene} + ${e.drug} on ClinPGx`;
+        chip.title = specific
+          ? `Open the CPIC guideline for ${e.gene} + ${e.drug}`
+          : `Open the CPIC guidelines index (specific page not yet published)`;
         chip.innerHTML = `<b>CPIC ${escapeHtml(e.classification || "")}</b> · ${escapeHtml(e.gene)} + ${escapeHtml(e.drug)} (${escapeHtml(e.phenotype)})<span class="cpic-arrow" aria-hidden="true">↗</span>`;
         chips.appendChild(chip);
       }
