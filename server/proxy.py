@@ -211,6 +211,102 @@ INTERACTIONS_SYSTEM = (
     '{"drug_gene":[], "drug_drug":[], "phenoconversion":[]}.'
 )
 
+# Lindsay's framing (4-agent-chat.html): one agent that knows what it isn't.
+# Tools are the four cards on her landing page — read status, map drug, catch
+# interactions, build list. The model decides which to call; we execute them
+# against the deterministic spine and feed results back. The model never sees
+# rsIDs or genotypes — only verified phenotype strings the engine produced.
+CHAT_SYSTEM = (
+    "You are DoseDNA, a pharmacogenomics agent helping the user understand how "
+    "their DNA may affect specific medications. You operate under hard rules:\n"
+    "- Use tools to find facts. Never invent a phenotype, drug guidance, or "
+    "interaction; if a tool says you don't have the information, say so.\n"
+    "- Never state a specific dose (mg, mcg, units, tablets) or imperative "
+    "dosing instructions ('you should stop', 'take 20mg').\n"
+    "- Always recommend confirming with a clinician or pharmacist.\n"
+    "- Refuse to overstep: if asked something outside pharmacogenomics or "
+    "beyond what the tools can verify, say so plainly.\n"
+    "- The user's raw DNA never leaves their device. You only ever see "
+    "verified phenotype labels (e.g. 'CYP2C19 Intermediate metabolizer') "
+    "and medication names.\n"
+    "Keep replies under 150 words. End each reply with one concrete question "
+    "the user could ask their clinician or pharmacist."
+)
+
+CHAT_TOOLS = [
+    {
+        "name": "get_gene_status",
+        "description": (
+            "Read the user's metabolizer phenotype for a specific pharmacogene "
+            "(CYP2C19, CYP2C9, VKORC1, SLCO1B1, TPMT, CYP2D6). Returns the "
+            "phenotype the deterministic engine called from the user's DNA "
+            "file, or 'not loaded' if the user hasn't loaded a file yet."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "gene": {
+                    "type": "string",
+                    "description": "Gene symbol, uppercase.",
+                },
+            },
+            "required": ["gene"],
+        },
+    },
+    {
+        "name": "get_drug_guidance",
+        "description": (
+            "Look up the canonical CPIC/FDA guidance for a specific drug at the "
+            "user's current phenotype for the relevant gene. Returns the "
+            "flag color (green/amber/red/gray), the bundled recommendation "
+            "text, and its source. Use this before commenting on any specific "
+            "drug; never paraphrase guidance you haven't looked up."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "gene": {"type": "string"},
+                "drug": {"type": "string"},
+            },
+            "required": ["gene", "drug"],
+        },
+    },
+    {
+        "name": "check_drug_interactions",
+        "description": (
+            "Run the deterministic interaction engine against the user's "
+            "current medication list. Returns flagged drug-drug interactions, "
+            "phenoconversion (an inhibitor/inducer changing the user's "
+            "effective phenotype), and drug-gene conflicts. All flags come "
+            "from bundled FDA/CPIC tables — nothing is invented."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
+        "name": "suggest_clinician_questions",
+        "description": (
+            "Generate 4-6 specific questions the user should bring to their "
+            "doctor or pharmacist, based on their phenotypes and current "
+            "medications. Use when the user wants a takeaway list, not "
+            "drug-specific guidance."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "focus_topic": {
+                    "type": "string",
+                    "description": "Optional topic to focus the questions on.",
+                },
+            },
+            "required": [],
+        },
+    },
+]
+
 app = FastAPI(title="DoseDNA proxy")
 
 # Any localhost / 127.0.0.1 origin works. Any external origin is blocked.
@@ -318,8 +414,43 @@ class InteractionsKindRequest(BaseModel):
         return v
 
 
+class ChatTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(..., max_length=4000)
+
+    @field_validator("content")
+    @classmethod
+    def reject_dna_content(cls, v: str) -> str:
+        return _reject_dna_shaped(v)
+
+
+class ChatKindRequest(BaseModel):
+    kind: Literal["chat"]
+    message: str = Field(..., max_length=2000)
+    conversation: list[ChatTurn] = Field(default_factory=list, max_length=20)
+    phenotypes: list[PhenotypeSummary] = Field(default_factory=list, max_length=20)
+    medications: list[str] = Field(default_factory=list, max_length=30)
+
+    @field_validator("message")
+    @classmethod
+    def reject_dna_message(cls, v: str) -> str:
+        return _reject_dna_shaped(v)
+
+    @field_validator("medications")
+    @classmethod
+    def reject_dna_meds(cls, v: list[str]) -> list[str]:
+        for med in v:
+            _reject_dna_shaped(med)
+        return v
+
+
 ExplainEndpointRequest = Annotated[
-    Union[ExplainKindRequest, QuestionsKindRequest, InteractionsKindRequest],
+    Union[
+        ExplainKindRequest,
+        QuestionsKindRequest,
+        InteractionsKindRequest,
+        ChatKindRequest,
+    ],
     Field(discriminator="kind"),
 ]
 
@@ -365,6 +496,17 @@ class InteractionsResponse(BaseModel):
     drug_gene: list[Flag] = Field(default_factory=list)
     drug_drug: list[Flag] = Field(default_factory=list)
     phenoconversion: list[Flag] = Field(default_factory=list)
+
+
+class ChatToolCall(BaseModel):
+    tool: str
+    input: dict
+
+
+class ChatResponse(BaseModel):
+    reply: str
+    tool_trace: list[ChatToolCall] = Field(default_factory=list)
+    source: Literal["claude", "fallback"]
 
 
 JSON_FENCE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
@@ -591,6 +733,234 @@ def _handle_interactions(req: InteractionsKindRequest) -> InteractionsResponse:
     )
 
 
+# Lookup the drugs.json drug key by case-insensitive match (the bundle uses
+# lowercase canonical names; the user / model may type any casing).
+_ALLOWED_DRUGS_LC = {d.lower(): d for d in _ALLOWED_DRUGS}
+
+
+def _execute_chat_tool(
+    name: str,
+    tool_input: dict,
+    req: "ChatKindRequest",
+    pheno_by_gene: dict[str, str],
+) -> str:
+    """Run one chat tool. Returns a plain-text result string for the model.
+
+    Tools are deliberately *strict*: unknown gene/drug arguments don't crash —
+    they return a polite error that the model can recover from. Tool inputs
+    cannot bypass the security boundary (allowlists, DNA-shape reject), since
+    every gene/drug is validated against the bundled set before it's used.
+    """
+    if name == "get_gene_status":
+        gene = (tool_input.get("gene") or "").strip()
+        if gene not in _ALLOWED_GENES:
+            return (
+                f"Unknown gene '{gene}'. Known genes: "
+                f"{', '.join(sorted(_ALLOWED_GENES))}."
+            )
+        phenotype = pheno_by_gene.get(gene)
+        if not phenotype:
+            return (
+                f"{gene} status not loaded. The user needs to load their DNA "
+                "file before this gene can be read."
+            )
+        return f"{gene}: {phenotype}"
+
+    if name == "get_drug_guidance":
+        gene = (tool_input.get("gene") or "").strip()
+        raw_drug = (tool_input.get("drug") or "").strip()
+        drug = _ALLOWED_DRUGS_LC.get(raw_drug.lower())
+        if gene not in _ALLOWED_GENES:
+            return f"Unknown gene '{gene}'."
+        if not drug:
+            return (
+                f"Unknown drug '{raw_drug}'. Known drugs: "
+                f"{', '.join(sorted(_ALLOWED_DRUGS))}."
+            )
+        phenotype = pheno_by_gene.get(gene)
+        if not phenotype:
+            return (
+                f"{gene} status not loaded — cannot fetch {drug} guidance "
+                "specific to this user."
+            )
+        if (gene, phenotype, drug) not in _ALLOWED_TUPLES:
+            return (
+                f"No bundled guidance for {gene} + {phenotype} + {drug}. "
+                "This combination isn't in our authored set."
+            )
+        row = _DRUGS_GUIDANCE.get(gene, {}).get(drug, {}).get(phenotype)
+        if not row:
+            return f"No bundled guidance row for ({gene}, {phenotype}, {drug})."
+        return (
+            f"{gene} {phenotype} taking {drug}:\n"
+            f"Flag: {row.get('flag', 'unknown')}\n"
+            f"Recommendation: {row.get('recommendation', '')}\n"
+            f"Source: {row.get('source', 'CPIC')}"
+        )
+
+    if name == "check_drug_interactions":
+        if not req.medications:
+            return (
+                "The user hasn't entered any medications yet. Ask them which "
+                "medications they're taking before calling this tool."
+            )
+        try:
+            int_req = InteractionsKindRequest(
+                kind="interactions",
+                phenotypes=req.phenotypes,
+                medications=req.medications,
+            )
+        except (ValidationError, ValueError) as exc:
+            return f"Interaction check rejected input: {exc}"
+        result = _handle_interactions(int_req)
+        if not (result.drug_gene or result.drug_drug or result.phenoconversion):
+            return "No flagged interactions for this medication list."
+        lines: list[str] = []
+        if result.drug_gene:
+            lines.append("Drug-gene flags:")
+            for f in result.drug_gene:
+                lines.append(f"- [{f.severity}] {f.flag}: {f.explanation}")
+        if result.drug_drug:
+            lines.append("Drug-drug interactions:")
+            for f in result.drug_drug:
+                lines.append(f"- [{f.severity}] {f.flag}: {f.explanation}")
+        if result.phenoconversion:
+            lines.append("Phenoconversion (inhibitor / inducer shifts):")
+            for f in result.phenoconversion:
+                lines.append(f"- [{f.severity}] {f.flag}: {f.explanation}")
+        return "\n".join(lines)
+
+    if name == "suggest_clinician_questions":
+        if not req.phenotypes and not req.medications:
+            return (
+                "No phenotypes or medications loaded yet. Ask the user to "
+                "load a DNA file and / or enter their medications first."
+            )
+        try:
+            q_req = QuestionsKindRequest(
+                kind="questions",
+                phenotypes=req.phenotypes,
+                medications=req.medications,
+            )
+        except (ValidationError, ValueError) as exc:
+            return f"Questions tool rejected input: {exc}"
+        result = _handle_questions(q_req)
+        if not result.questions:
+            return "No questions were generated."
+        focus = (tool_input.get("focus_topic") or "").strip()
+        prefix = (
+            f"Clinician questions (focus: {focus}):\n" if focus
+            else "Clinician questions:\n"
+        )
+        return prefix + "\n".join(f"- {q}" for q in result.questions)
+
+    return f"Unknown tool: {name}"
+
+
+def _handle_chat(req: ChatKindRequest) -> ChatResponse:
+    """Chat loop with tool-use against the deterministic spine.
+
+    Architecture (Lindsay's framing): the model receives the user's prior
+    conversation plus a context block listing the verified phenotypes and
+    medication names. It chooses which of four tools to call; the tools run
+    against the bundled data; results are fed back. After a final non-tool-use
+    turn (or after a step cap), the assistant text is returned along with a
+    trace of which tools fired — the trace lets the UI render Lindsay's
+    "underneath, it's a calculator" demo moment.
+    """
+    pheno_by_gene = {p.gene: p.phenotype for p in req.phenotypes}
+
+    context_lines: list[str] = []
+    if req.phenotypes:
+        context_lines.append("Verified phenotypes (read deterministically from the user's DNA file):")
+        for p in req.phenotypes:
+            context_lines.append(f"- {p.gene}: {p.phenotype}")
+    else:
+        context_lines.append("No DNA file has been loaded yet — phenotype tools will return 'not loaded'.")
+    if req.medications:
+        context_lines.append(
+            "Current medications the user reported: " + ", ".join(req.medications)
+        )
+    else:
+        context_lines.append("No medications reported yet.")
+    context_block = "\n".join(context_lines)
+
+    messages: list[dict] = []
+    for turn in req.conversation:
+        messages.append({"role": turn.role, "content": turn.content})
+    augmented_user_message = (
+        f"[Context]\n{context_block}\n\n[User question]\n{req.message}"
+    )
+    messages.append({"role": "user", "content": augmented_user_message})
+
+    tool_trace: list[ChatToolCall] = []
+    MAX_ITERATIONS = 6
+
+    for _ in range(MAX_ITERATIONS):
+        try:
+            response = client.messages.create(
+                model=MODEL,
+                max_tokens=1024,
+                system=CHAT_SYSTEM,
+                tools=CHAT_TOOLS,
+                messages=messages,
+            )
+        except APIError:
+            return ChatResponse(
+                reply=(
+                    "I couldn't reach the language model right now. The "
+                    "deterministic results from your DNA are still available "
+                    "in the main app — please try again in a moment."
+                ),
+                tool_trace=tool_trace,
+                source="fallback",
+            )
+
+        if response.stop_reason != "tool_use":
+            text = "".join(
+                b.text for b in response.content if getattr(b, "type", None) == "text"
+            ).strip()
+            return ChatResponse(
+                reply=text or "I don't have a response for that.",
+                tool_trace=tool_trace,
+                source="claude",
+            )
+
+        # Re-append assistant turn verbatim so the next call sees the tool_use.
+        messages.append(
+            {
+                "role": "assistant",
+                "content": [b.model_dump() for b in response.content],
+            }
+        )
+        tool_result_blocks: list[dict] = []
+        for block in response.content:
+            if getattr(block, "type", None) != "tool_use":
+                continue
+            block_input = dict(block.input) if hasattr(block, "input") else {}
+            tool_trace.append(ChatToolCall(tool=block.name, input=block_input))
+            result_text = _execute_chat_tool(
+                block.name, block_input, req, pheno_by_gene
+            )
+            tool_result_blocks.append(
+                {
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": result_text,
+                }
+            )
+        messages.append({"role": "user", "content": tool_result_blocks})
+
+    return ChatResponse(
+        reply=(
+            "I ran out of steps trying to answer that. Try asking something "
+            "narrower, like 'what does my CYP2C19 status mean for clopidogrel?'"
+        ),
+        tool_trace=tool_trace,
+        source="claude",
+    )
+
+
 # BUILD_SPEC §12a says one endpoint. /api/questions and /api/check-meds are
 # gone; both behaviors live here under kind="questions" / kind="interactions".
 # response_model is None because the response shape is per-kind — FastAPI still
@@ -607,5 +977,7 @@ def explain(req: ExplainEndpointRequest):
         return _handle_questions(req)
     if isinstance(req, InteractionsKindRequest):
         return _handle_interactions(req)
+    if isinstance(req, ChatKindRequest):
+        return _handle_chat(req)
     # Discriminated union should make this unreachable, but be loud if not.
     raise HTTPException(status_code=400, detail="unknown kind")

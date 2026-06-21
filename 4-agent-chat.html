@@ -78,8 +78,28 @@
   .typing i:nth-child(2){animation-delay:.18s} .typing i:nth-child(3){animation-delay:.36s}
   @keyframes bob{0%,60%,100%{opacity:.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-3px)}}
   .composer{display:flex; gap:10px; padding:14px 16px; border-top:1px solid var(--line); background:#fff}
-  .composer .inp{flex:1; border:1px solid var(--line); border-radius:11px; padding:11px 14px; color:var(--muted); font-size:.92rem}
-  .composer .send{width:40px;height:40px;border-radius:11px;background:var(--azure); color:#fff; display:grid; place-items:center}
+  .composer .inp{flex:1; border:1px solid var(--line); border-radius:11px; padding:11px 14px; color:var(--ink); font-size:.92rem; font-family:inherit; background:#fff; outline:none; transition:border-color .15s}
+  .composer .inp:focus{border-color:var(--azure); box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+  .composer .inp:disabled{background:#f7f9fc; color:var(--muted); cursor:not-allowed}
+  .composer .inp::placeholder{color:var(--muted)}
+  .composer .send{width:40px;height:40px;border-radius:11px;background:var(--azure); color:#fff; display:grid; place-items:center; border:0; font-size:1.05rem; cursor:pointer; transition:background .15s}
+  .composer .send:hover:not(:disabled){background:#1d4ed8}
+  .composer .send:disabled{background:#cbd5e1; color:#94a3b8; cursor:not-allowed}
+
+  /* Load-sample / upload row underneath the chat */
+  .chat-actions{display:flex; gap:8px; align-items:center; padding:10px 16px 14px; border-top:1px dashed var(--line); background:#fbfcfe; font-size:.84rem}
+  .ca-btn{border:1px solid var(--azure); background:var(--azure); color:#fff; padding:7px 12px; border-radius:8px; font-size:.82rem; font-weight:600; cursor:pointer; font-family:inherit; transition:background .15s}
+  .ca-btn:hover{background:#1d4ed8}
+  .ca-btn.ca-ghost{background:#fff; color:var(--azure)}
+  .ca-btn.ca-ghost:hover{background:var(--primary-light, #eef4ff)}
+  .ca-status{margin-left:auto; color:var(--muted); font-size:.78rem; font-family:"JetBrains Mono",ui-monospace,monospace}
+  .ca-status.ok{color:var(--green)}
+  .ca-status.err{color:var(--red)}
+
+  /* Loaded-phenotype summary chip row above the messages */
+  .pheno-row{display:flex; gap:6px; flex-wrap:wrap; padding:10px 18px; background:#f7f9fc; border-bottom:1px solid var(--line)}
+  .pheno-chip{font-size:.74rem; font-weight:600; padding:4px 9px; border-radius:999px; background:#eaf0ff; color:var(--azure); font-family:"JetBrains Mono",ui-monospace,monospace}
+  .pheno-chip.muted{background:#f1f5f9; color:var(--muted)}
 
   /* logos / trust strip */
   .strip{background:var(--navy); color:#cdd6ee; padding:18px 0}
@@ -153,44 +173,26 @@
   <div class="chat">
     <div class="bar">
       <svg class="mark"><use href="#helix"/></svg>
-      <div class="t">DoseDNA agent <span>· CYP2C19 session</span></div>
-      <div class="lock">● on-device</div>
+      <div class="t">DoseDNA agent <span id="chat-bar-status">· no file loaded</span></div>
+      <div class="lock" id="privacy-lock">● on-device</div>
     </div>
-    <div class="stream">
-      <div class="msg u"><div class="av">You</div><div class="bubble">My doctor mentioned clopidogrel. Anything in my DNA I should ask about?</div></div>
-
-      <div class="msg a"><div class="av">DX</div><div class="bubble a">
-        Let me check the gene that activates clopidogrel against your file.
-        <div class="tool">
-          <div class="th"><svg class="ic"><use href="#helix"/></svg>check_drug_gene · clopidogrel</div>
-          <div class="tb">
-            <div class="kv"><span>Gene</span><b>CYP2C19</b></div>
-            <div class="kv"><span>Status from your file</span><b><span class="status s-poor">Poor metabolizer</span></b></div>
-            <div class="kv"><span>Drug type</span><b>Prodrug (needs activation)</b></div>
-          </div>
+    <div class="stream" id="chat-stream">
+      <div class="msg a">
+        <div class="av">DX</div>
+        <div class="bubble a">
+          Hi. To get started, load your DNA file — your file stays on this device, only verified phenotype labels ever reach me. Use <b>Load sample</b> below to try the demo file.
         </div>
-        <div class="flag red"><span class="b">⚑</span><div><b>Worth flagging.</b> As a poor metabolizer, your body may activate clopidogrel less, so it could be <b>less effective</b> at preventing clots.</div></div>
-      </div></div>
-
-      <div class="msg u"><div class="av">You</div><div class="bubble">I also take escitalopram — same gene, so same problem?</div></div>
-
-      <div class="msg a"><div class="av">DX</div><div class="bubble a">
-        Same gene, but the opposite direction — here's why.
-        <div class="tool">
-          <div class="th"><svg class="ic"><use href="#helix"/></svg>check_drug_gene · escitalopram</div>
-          <div class="tb">
-            <div class="kv"><span>Gene</span><b>CYP2C19</b></div>
-            <div class="kv"><span>Drug type</span><b>Active drug (needs clearing)</b></div>
-          </div>
-        </div>
-        <div class="flag amber"><span class="b">⚑</span><div><b>Different flag.</b> Here the slow enzyme means escitalopram clears slowly and may <b>build up</b> — the opposite concern. Bring both to your pharmacist.</div></div>
-      </div></div>
-
-      <div class="msg a"><div class="av">DX</div><div class="typing"><i></i><i></i><i></i></div></div>
+      </div>
     </div>
     <div class="composer">
-      <div class="inp">Ask about another medication…</div>
-      <div class="send">↑</div>
+      <input class="inp" id="chat-input" type="text" placeholder="Load your DNA file to start…" autocomplete="off" disabled />
+      <button class="send" id="chat-send-btn" type="button" aria-label="Send" disabled>↑</button>
+    </div>
+    <div class="chat-actions">
+      <button id="load-sample-btn" type="button" class="ca-btn">Load sample DNA</button>
+      <input id="dna-file-input" type="file" accept=".txt,.tsv,.csv" hidden />
+      <button id="load-file-btn" type="button" class="ca-btn ca-ghost">Upload your own file</button>
+      <span class="ca-status" id="file-status"></span>
     </div>
   </div>
 </header>
@@ -271,6 +273,241 @@
     <p class="disc"><b>Not medical advice.</b> The DoseDNA agent is informational and not a diagnostic device. It does not tell you whether a medication is safe for you and you should not start, stop, or change any medication based on it. When a metabolizer status cannot be determined from your file it is reported as “not determined,” never as normal. Always confirm with a qualified clinician or pharmacist.</p>
   </div>
 </footer>
+
+<script type="module">
+  // Wire Lindsay's chat UI to the deterministic backend (proxy /api/explain
+  // with kind="chat" — tool-use over four tools that read genes.json, drugs.json,
+  // and interactions.json). The page imports the same parser worker, pgx
+  // engine, and explain.js client the main app uses, so the privacy contract
+  // is identical: file bytes never leave this tab, only verified phenotype
+  // labels and medication names ever reach the proxy.
+
+  import { installPrivacyConsole } from "./src/privacyConsole.js";
+  import { fetchChat } from "./src/explain.js";
+
+  installPrivacyConsole();
+
+  const streamEl = document.getElementById("chat-stream");
+  const inputEl = document.getElementById("chat-input");
+  const sendBtn = document.getElementById("chat-send-btn");
+  const loadSampleBtn = document.getElementById("load-sample-btn");
+  const loadFileBtn = document.getElementById("load-file-btn");
+  const fileInput = document.getElementById("dna-file-input");
+  const statusEl = document.getElementById("file-status");
+  const barStatusEl = document.getElementById("chat-bar-status");
+
+  // Wire the marketing CTAs to also load the sample file.
+  for (const sel of ['a[href="#start"]', '#start .btn']) {
+    document.querySelectorAll(sel).forEach((a) => {
+      a.addEventListener("click", (e) => {
+        e.preventDefault();
+        loadSampleBtn.click();
+        inputEl.focus();
+      });
+    });
+  }
+
+  let phenotypes = []; // [{gene, phenotype}]
+  let conversation = []; // [{role, content}]
+  let phenoRowEl = null;
+  let worker = null;
+
+  function setStatus(text, kind = "") {
+    statusEl.textContent = text;
+    statusEl.className = "ca-status" + (kind ? " " + kind : "");
+  }
+
+  function renderPhenotypeRow() {
+    if (!phenotypes.length) {
+      if (phenoRowEl) phenoRowEl.remove();
+      phenoRowEl = null;
+      barStatusEl.textContent = "· no file loaded";
+      return;
+    }
+    if (!phenoRowEl) {
+      phenoRowEl = document.createElement("div");
+      phenoRowEl.className = "pheno-row";
+      streamEl.parentNode.insertBefore(phenoRowEl, streamEl);
+    }
+    phenoRowEl.innerHTML = "";
+    for (const p of phenotypes) {
+      const chip = document.createElement("span");
+      const muted = /not determined|coverage limited/i.test(p.phenotype);
+      chip.className = "pheno-chip" + (muted ? " muted" : "");
+      chip.textContent = `${p.gene}: ${p.phenotype}`;
+      phenoRowEl.appendChild(chip);
+    }
+    barStatusEl.textContent = `· ${phenotypes.length} gene${phenotypes.length === 1 ? "" : "s"} loaded`;
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  function renderMessage(role, content, toolTrace = []) {
+    const msg = document.createElement("div");
+    msg.className = "msg " + (role === "user" ? "u" : "a");
+    const av = document.createElement("div");
+    av.className = "av";
+    av.textContent = role === "user" ? "You" : "DX";
+    const bubble = document.createElement("div");
+    bubble.className = "bubble" + (role === "assistant" ? " a" : "");
+    bubble.innerHTML = escapeHtml(content).replace(/\n/g, "<br>");
+
+    // Render tool calls inside the assistant bubble — matches Lindsay's
+    // static preview style so the demo feels coherent.
+    for (const tc of toolTrace) {
+      const tool = document.createElement("div");
+      tool.className = "tool";
+      const th = document.createElement("div");
+      th.className = "th";
+      th.innerHTML = `<svg class="ic"><use href="#helix"/></svg>${escapeHtml(tc.tool)}`;
+      const tb = document.createElement("div");
+      tb.className = "tb";
+      const args = Object.entries(tc.input || {});
+      if (args.length === 0) {
+        tb.innerHTML = `<div class="kv"><span>arguments</span><b>(none)</b></div>`;
+      } else {
+        tb.innerHTML = args
+          .map(([k, v]) => `<div class="kv"><span>${escapeHtml(k)}</span><b>${escapeHtml(String(v))}</b></div>`)
+          .join("");
+      }
+      tool.appendChild(th);
+      tool.appendChild(tb);
+      bubble.appendChild(tool);
+    }
+
+    msg.appendChild(av);
+    msg.appendChild(bubble);
+    streamEl.appendChild(msg);
+    streamEl.scrollTop = streamEl.scrollHeight;
+  }
+
+  function showTypingIndicator() {
+    const msg = document.createElement("div");
+    msg.className = "msg a";
+    msg.id = "typing-indicator";
+    msg.innerHTML = `<div class="av">DX</div><div class="typing"><i></i><i></i><i></i></div>`;
+    streamEl.appendChild(msg);
+    streamEl.scrollTop = streamEl.scrollHeight;
+  }
+
+  function hideTypingIndicator() {
+    const el = document.getElementById("typing-indicator");
+    if (el) el.remove();
+  }
+
+  function enableChat() {
+    inputEl.disabled = false;
+    inputEl.placeholder = "Ask about a medication or interaction…";
+    sendBtn.disabled = false;
+    inputEl.focus();
+  }
+
+  // ── DNA loading ────────────────────────────────────────────────────────────
+
+  function startWorker() {
+    if (worker) worker.terminate();
+    worker = new Worker(new URL("./src/parser.worker.js", import.meta.url), {
+      type: "module",
+    });
+    worker.onmessage = async (event) => {
+      const { type } = event.data;
+      if (type === "result") {
+        setStatus(`Parsed ${Object.keys(event.data.genotypes).length} target SNPs locally`, "ok");
+        try {
+          const { genotypesToResults } = await import("./src/pgx.js");
+          const results = await genotypesToResults(event.data.genotypes);
+          phenotypes = results.map((r) => ({
+            gene: r.gene,
+            phenotype: r.phenotype,
+          }));
+          renderPhenotypeRow();
+          enableChat();
+        } catch (err) {
+          setStatus("PGx engine failed: " + (err.message || err), "err");
+        }
+      } else if (type === "error") {
+        setStatus("Parse error: " + event.data.message, "err");
+      }
+    };
+    worker.onerror = (event) => {
+      setStatus("Worker failed: " + (event.message || event.filename || "unknown"), "err");
+    };
+  }
+
+  loadSampleBtn.addEventListener("click", async () => {
+    setStatus("Loading bundled sample…");
+    try {
+      const res = await fetch("./sample/sample_23andme.txt");
+      const text = await res.text();
+      startWorker();
+      worker.postMessage({ type: "parse", fileText: text });
+    } catch (err) {
+      setStatus("Could not load sample: " + err.message, "err");
+    }
+  });
+
+  loadFileBtn.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setStatus(`Reading ${file.name} locally…`);
+    const reader = new FileReader();
+    reader.onload = () => {
+      startWorker();
+      worker.postMessage({ type: "parse", fileText: reader.result });
+    };
+    reader.onerror = () => setStatus("Could not read file", "err");
+    reader.readAsText(file);
+  });
+
+  // ── Chat send ───────────────────────────────────────────────────────────────
+
+  async function sendMessage() {
+    const message = inputEl.value.trim();
+    if (!message || sendBtn.disabled) return;
+    inputEl.value = "";
+    inputEl.disabled = true;
+    sendBtn.disabled = true;
+    renderMessage("user", message);
+    conversation.push({ role: "user", content: message });
+    showTypingIndicator();
+
+    try {
+      const data = await fetchChat({
+        message,
+        conversation: conversation.slice(0, -1), // server gets prior history; new turn is `message`
+        phenotypes,
+        medications: [], // chat agent prompts the user; no separate meds box
+      });
+      hideTypingIndicator();
+      renderMessage("assistant", data.reply, data.tool_trace || []);
+      conversation.push({ role: "assistant", content: data.reply });
+    } catch (err) {
+      hideTypingIndicator();
+      renderMessage(
+        "assistant",
+        "Sorry — couldn't reach the proxy. Is `make proxy` running on :8001? (" + err.message + ")",
+      );
+    } finally {
+      inputEl.disabled = false;
+      sendBtn.disabled = false;
+      inputEl.focus();
+    }
+  }
+
+  sendBtn.addEventListener("click", sendMessage);
+  inputEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+</script>
 
 </body>
 </html>

@@ -68,3 +68,30 @@ export async function fetchMedInteractions({ phenotypes, medications }) {
     medications,
   });
 }
+
+/**
+ * Send a chat turn to the proxy. The proxy runs an Anthropic tool-use loop
+ * against the deterministic spine (read gene status, map drug guidance,
+ * check interactions, suggest clinician questions) and returns:
+ *   - reply: the final assistant text
+ *   - tool_trace: which tools fired and with what inputs (for "underneath,
+ *     it's a calculator" demo affordances)
+ *   - source: "claude" | "fallback"
+ *
+ * The proxy never sees DNA. We pass phenotypes (verified labels like
+ * "CYP2C19 Intermediate metabolizer") and medication names only.
+ */
+export async function fetchChat({
+  message,
+  conversation,
+  phenotypes,
+  medications,
+}) {
+  return postJson("/api/explain", {
+    kind: "chat",
+    message,
+    conversation: conversation ?? [],
+    phenotypes: phenotypes ?? [],
+    medications: medications ?? [],
+  });
+}
