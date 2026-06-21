@@ -183,6 +183,13 @@ Honest about what's external and what's internal — full audit in
 - **PGxQA benchmark** (`tests/pgxqa.test.mjs`, Keat et al., PSB 2025):
   expert-review tier — 5/6 partial matches on in-scope cases, 4/4
   clean refusal on out-of-scope.
+- **Patient benchmark — 19/19 passing** (`tests/patient-benchmark.test.mjs`,
+  `make benchmark`): synthetic patient files curated by our bio
+  collaborator with seeded variants AND the independently-known CPIC
+  phenotype each diplotype should produce. Tests the full pipeline:
+  file → parser → engine → phenotype + coverage_state. Includes the
+  deliberate "Not determined" honesty case on patient 05 where coverage
+  is partial — proving the engine refuses to guess.
 
 ### Internal-only (regression, not validation)
 - 14-case agent regression suite (`tests/agent.test.mjs`): questions and
@@ -252,6 +259,7 @@ Run the tests:
 make test          # 79 PGx engine cases
 make parser-test   # 33 parser cases
 make lit-test      # 7 literature-grounded cases (requires proxy + API key)
+make benchmark     # 19 patient-pipeline assertions, no API required
 make pgxqa-test    # PGxQA expert-review benchmark (requires proxy + API key)
 ```
 

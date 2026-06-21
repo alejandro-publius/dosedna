@@ -220,8 +220,8 @@ function buildPanel() {
   badge.id = "privacy-badge";
   styleEl(badge, {
     position: "fixed",
-    top: "16px",
-    right: "16px",
+    bottom: "16px",
+    left: "16px",
     padding: "7px 12px",
     background: PALETTE.accent,
     color: "#06140b",
