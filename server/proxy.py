@@ -293,6 +293,44 @@ CPIC_TIMEOUT_S = 6.0
 _CPIC_DRUGID_CACHE: dict[str, Optional[str]] = {}
 _CPIC_RECS_CACHE: dict[str, list[dict]] = {}
 
+# Disk-backed CPIC cache. Built by scripts/cache_cpic.py, lives at
+# src/data/cpic_recommendations.json. Pre-seeds the two in-memory caches at
+# startup so the agent serves every bundled drug without ever hitting CPIC's
+# API live — bulletproof for demo day. Re-run the script to refresh.
+_CPIC_CACHE_PATH = _REPO_ROOT / "src" / "data" / "cpic_recommendations.json"
+
+
+def _load_cpic_disk_cache() -> int:
+    """Pre-populate _CPIC_DRUGID_CACHE and _CPIC_RECS_CACHE from disk.
+
+    Returns the number of drugs loaded (for the startup log). Silently
+    returns 0 if the cache file is missing or malformed; the live API path
+    in _cpic_lookup still works as a fallback.
+    """
+    if not _CPIC_CACHE_PATH.exists():
+        return 0
+    try:
+        with _CPIC_CACHE_PATH.open() as fh:
+            payload = json.load(fh)
+    except (json.JSONDecodeError, OSError):
+        return 0
+    drugs = payload.get("drugs", {})
+    if not isinstance(drugs, dict):
+        return 0
+    for drug_name, entry in drugs.items():
+        if not isinstance(entry, dict):
+            continue
+        drugid = entry.get("drugid")
+        recs = entry.get("recommendations")
+        if not drugid or not isinstance(recs, list):
+            continue
+        _CPIC_DRUGID_CACHE[drug_name.lower().strip()] = drugid
+        _CPIC_RECS_CACHE[drugid] = recs
+    return len(drugs)
+
+
+_CPIC_DISK_HITS = _load_cpic_disk_cache()
+
 
 def _cpic_get_json(url: str) -> Optional[object]:
     try:
