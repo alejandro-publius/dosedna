@@ -154,6 +154,9 @@ function styleEl(el, styles) {
 }
 
 function buildPanel() {
+  // Hidden by default. The small green badge at top-right is the persistent
+  // trust signal — clicking it expands the detailed monitor for skeptics.
+  // (Earlier feedback: the panel-by-default felt like a security alert.)
   const root = document.createElement("aside");
   root.id = "privacy-console";
   styleEl(root, {
@@ -168,7 +171,7 @@ function buildPanel() {
     fontSize: "12px",
     boxShadow: "-4px -4px 24px rgba(0,0,0,0.4)",
     zIndex: "999999",
-    display: "flex",
+    display: "none", // hidden initially — badge click toggles
     flexDirection: "column",
     borderTopLeftRadius: "12px",
     overflow: "hidden",
@@ -184,8 +187,8 @@ function buildPanel() {
     borderBottom: "1px solid #1d2533",
   });
   header.innerHTML = `
-    <strong style="letter-spacing:.5px">PRIVACY CONSOLE</strong>
-    <span id="pc-toggle" style="cursor:pointer;color:${PALETTE.dim}">[collapse]</span>
+    <strong style="letter-spacing:.3px;font-weight:600">Privacy monitor</strong>
+    <span id="pc-toggle" style="cursor:pointer;color:${PALETTE.dim};font-size:11px">close ✕</span>
   `;
 
   const counter = document.createElement("div");
@@ -195,10 +198,10 @@ function buildPanel() {
     lineHeight: "1.5",
   });
   counter.innerHTML = `
-    <div>Bytes tagged as DNA-shaped that left your device: <strong id="pc-bytes" style="color:${PALETTE.accent}">0 B</strong></div>
-    <div style="color:${PALETTE.dim};margin-top:4px">
-      Every fetch, XHR, beacon, WebSocket, image, script, iframe, link,
-      EventSource, RTCPeerConnection, window.open, and form submit is logged below.
+    <div style="color:${PALETTE.accent};font-weight:600">Your DNA has stayed on this device.</div>
+    <div style="margin-top:4px">DNA-shaped data that has left: <strong id="pc-bytes" style="color:${PALETTE.accent}">0 B</strong></div>
+    <div style="color:${PALETTE.dim};margin-top:6px;font-size:11px">
+      This panel records every outgoing request from this page in real time so you can verify the privacy claim. Open for the technically curious — close it any time.
     </div>
   `;
 
@@ -219,26 +222,42 @@ function buildPanel() {
     position: "fixed",
     top: "16px",
     right: "16px",
-    padding: "6px 10px",
+    padding: "7px 12px",
     background: PALETTE.accent,
     color: "#06140b",
-    fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, sans-serif",
     fontSize: "11px",
     borderRadius: "999px",
     zIndex: "999998",
     fontWeight: "600",
+    cursor: "pointer",
+    boxShadow: "0 2px 8px rgba(82,210,115,0.25)",
+    userSelect: "none",
+    transition: "transform 0.15s ease, box-shadow 0.15s ease",
   });
-  badge.textContent = "● ON-DEVICE";
+  badge.title = "Click to see privacy monitor details";
+  badge.textContent = "● DNA stays here";
 
   document.body.append(root, badge);
 
   const toggle = header.querySelector("#pc-toggle");
-  let collapsed = false;
-  toggle.addEventListener("click", () => {
-    collapsed = !collapsed;
-    counter.style.display = collapsed ? "none" : "";
-    list.style.display = collapsed ? "none" : "";
-    toggle.textContent = collapsed ? "[expand]" : "[collapse]";
+  let visible = false;
+  function setVisible(next) {
+    visible = next;
+    root.style.display = visible ? "flex" : "none";
+  }
+  badge.addEventListener("click", () => setVisible(!visible));
+  toggle.addEventListener("click", (e) => {
+    e.stopPropagation();
+    setVisible(false);
+  });
+  badge.addEventListener("mouseenter", () => {
+    badge.style.transform = "translateY(-1px)";
+    badge.style.boxShadow = "0 4px 12px rgba(82,210,115,0.35)";
+  });
+  badge.addEventListener("mouseleave", () => {
+    badge.style.transform = "";
+    badge.style.boxShadow = "0 2px 8px rgba(82,210,115,0.25)";
   });
 
   return { list, counter: counter.querySelector("#pc-bytes"), badge };
