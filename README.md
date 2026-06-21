@@ -1,158 +1,171 @@
 # DoseDNA
 
-> Before you take a new medication, see how your body may handle it —
-> based on your DNA, without your genome ever leaving your device.
+> **Ask your genome a straight question.** A chat agent grounded in CPIC
+> guidelines that answers in plain language — and your DNA never leaves
+> your laptop.
 
-Privacy-first pharmacogenomics in the browser. Drop in a 23andMe file, see
-per-gene phenotypes and drug guidance, and watch in real time that nothing
-DNA-shaped ever leaves your laptop.
+DoseDNA is a privacy-first pharmacogenomics web app. Drop in a 23andMe or
+AncestryDNA file, ask the agent how your DNA affects a medication, and watch
+in real time that nothing DNA-shaped ever leaves your device.
 
-The pharmacogenomics is the wedge. The architecture — parse locally, reason
-only over anonymized summaries — is the venture.
+The conversation is on top. Underneath, it's a deterministic engine that calls
+your phenotypes from CPIC tables and looks up the actual CPIC clinical
+recommendation before the agent says a word.
 
 ## Status
 
-Pre-spec implementation just landed on branch `alex/pgx-pipeline`. The core
-deterministic pipeline (parse → diplotype → phenotype → guidance) is wired
-end-to-end and tested. There are real, known gaps against
-[`BUILD_SPEC`](./BUILD_SPEC) — see "Not built yet" below.
+Built for [AI Hackathon 2026 at Berkeley](https://hackberkeley.org), beginner
+track. Judging Sunday 1–3pm.
 
-Hackathon demo target: **Sunday 4–6pm**. See [`DEMO.md`](./DEMO.md) for the
-script.
+## What's built
 
-## What's built right now
+### Chat agent (`4-agent-chat.html`)
+The landing page is the demo. Load a DNA file, ask a question in natural
+English, and the agent answers using four tools — each call shown inline.
 
-**Local PGx engine** (`src/pgx.js`)
-- 5 genes called deterministically: CYP2C19, CYP2C9, VKORC1, SLCO1B1, TPMT.
-- CYP2D6 is always returned as "Coverage limited" — consumer arrays can't
-  call its structural variants and we refuse to guess.
-- Strand-aware genotype decoding (plus / minus complement, per spec §6b).
-- Phenotype-if-invariant rule: when phase or missing positions are ambiguous,
-  we enumerate every assignment and only report a phenotype if all branches
-  agree. Otherwise: "Not determined", `coverage_state: partial`.
-- 52/52 deterministic tests passing in `tests/pgx.test.mjs`
-  (synthetic genotypes + the bundled sample file).
+### Deterministic PGx engine (`src/pgx.js`)
+- 6 genes called locally in the browser: CYP2C19, CYP2C9, VKORC1, SLCO1B1,
+  TPMT, CYP2D6.
+- CYP2D6 is always "Coverage limited" — consumer arrays can't call its
+  structural variants, and we refuse to guess.
+- Phenotype-if-invariant rule (BUILD_SPEC §7): when phase or coverage is
+  ambiguous, enumerate every possible assignment; only report a phenotype
+  if every branch agrees. Otherwise "Not determined."
+- 79/79 tests passing in `tests/pgx.test.mjs`.
 
-**In-browser parser** (`src/parser.worker.js`)
-- 23andMe TSV, parsed in a Web Worker so the UI never freezes.
-- File bytes stay in worker scope; only `{rsid: "AG", ...}` for target SNPs
-  is handed back to the page.
-- AncestryDNA branch is in [`BUILD_SPEC`](./BUILD_SPEC) §9 but not yet
-  implemented.
+### In-browser parser (`src/parser.worker.js`)
+- 23andMe **and** AncestryDNA TSV formats, both auto-detected from header
+  + column count.
+- Runs in a Web Worker so the UI never freezes.
+- File bytes stay in worker scope; only `{rsid: "AG", ...}` for the 10
+  target SNPs is handed back to the page.
+- 33 parser tests in `tests/parser.test.mjs`.
 
-**Privacy Console** (`src/privacyConsole.js`)
-- Live overlay logging every outbound `fetch` / `XHR`: URL, method, byte
-  count, payload preview.
-- This is the demo's load-bearing claim — see DEMO 0:30–1:00 and 2:30–3:30.
-  If the counter ever ticks up on anything DNA-shaped, the product is a lie.
-
-**FastAPI proxy** (`server/proxy.py`)
+### Hardened proxy (`server/proxy.py`)
+- **One** endpoint, `POST /api/explain`, discriminated by a `kind` field
+  (`explain` | `questions` | `interactions` | `chat`).
 - Holds `ANTHROPIC_API_KEY`. Browser never sees it.
-- Three endpoints today: `POST /api/explain`, `POST /api/questions`,
-  `POST /api/check-meds`.
+- Allowlist built from `genes.json` + `drugs.json` at startup — every
+  `(gene, phenotype, drug)` tuple validated before any string reaches Claude.
 - Defense-in-depth: rejects any payload containing rsID-shaped strings or
-  long ACGT runs before it ever reaches Claude.
-- Spec §12 calls for **one** endpoint backed by the precomputed bundle.
-  Three live endpoints is a known gap (see below).
+  long ACGT runs.
+- Per-IP rate limit, CORS locked to localhost.
+- No request body logging.
+- Model: `claude-haiku-4-5`.
 
-**Bundled data**
-- `src/data/genes.json` — variants, function tables, diplotype/phenotype rules.
-- `src/data/drugs.json` — phenotype → drug guidance rows for the MVP drug set.
-- `sample/sample_23andme.txt` — demo file for "Load sample".
-- `sample/expected_phenotypes.json` — known-answer fixture (synthetic, not
-  yet GeT-RM consensus).
+### Four agent tools (driven by Anthropic tool-use)
+1. **`get_gene_status(gene)`** — reads the user's metabolizer phenotype.
+2. **`lookup_cpic_recommendation(gene, drug, phenotype)`** — fetches CPIC's
+   verbatim recommendation, implications text, and evidence classification.
+3. **`check_drug_interactions()`** — runs the deterministic interaction
+   engine over the user's medications.
+4. **`suggest_clinician_questions(focus_topic)`** — generates a takeaway
+   list for the doctor visit.
 
-## Not built yet vs BUILD_SPEC
+### CPIC integration
+- **Live**: `api.cpicpgx.org/v1/recommendation` queried in real time by the
+  chat agent for the authoritative CPIC text.
+- **Disk-cached**: `src/data/cpic_recommendations.json` — pre-pulled CPIC
+  recommendations for all 17 bundled drugs (built by
+  `scripts/cache_cpic.py`). The proxy pre-seeds its in-memory CPIC caches
+  from this file at startup, so the demo works even if `api.cpicpgx.org`
+  is offline.
 
-Be honest with judges and teammates about these:
+### Deterministic interactions (`src/data/interactions.json`)
+- 8 phenoconversion entries (inhibitor / inducer pairs) with FDA / CPIC /
+  DPWG citations.
+- 6 drug-drug interactions (clopidogrel + omeprazole, warfarin + amiodarone,
+  simvastatin + clarithromycin, etc.) with FDA / CPIC citations.
+- No live Claude reasoning — every clinical claim is grounded in a
+  bundled, citable source.
 
-- **AncestryDNA parser** — spec §9, parser currently 23andMe only.
-- **`explanations.json` precompute pipeline** (spec §13) — the offline script
-  to batch-generate every `(gene, phenotype, drug, coverage_state)`
-  explanation isn't wired up. Today the proxy calls Claude live on every
-  `/api/explain`.
-- **GeT-RM known-answer fixtures** (spec §14b) — current tests are synthetic
-  + sample-based. Coriell / CDC GeT-RM consensus genotypes are not in the
-  repo yet.
-- **Phenoconversion table** (spec §11) — `/api/check-meds` currently relies
-  on live Claude reasoning to flag enzyme inhibitors. The spec wants a
-  bundled, deterministic table; relying on the model here violates the
-  "deterministic medicine, generative language" rule (§1).
-- **Full Section 10 drug guidance set** — `drugs.json` covers the core
-  examples (clopidogrel, statins, warfarin/VKORC1, TPMT thiopurines, a few
-  SSRIs/PPIs). The complete CPIC-anchored matrix isn't there yet.
+### Privacy Console (`src/privacyConsole.js`)
+- Patches every outbound-network primitive in the browser (fetch, XHR,
+  beacon, WebSocket, Image, Script, Iframe, Link, EventSource,
+  RTCPeerConnection, window.open, form submit, Web Workers).
+- Case-insensitive DNA-shape detection across URL, body, base64-decoded
+  payloads, and a rolling buffer (catches chunked leaks).
+- Collapsed by default behind a single pill — "● See where my data goes."
+- Click to expand the technical monitor.
+
+### Bundled data
+- `src/data/genes.json` — variants, function tables, diplotype rules.
+- `src/data/drugs.json` — 17 drugs × phenotypes with CPIC-derived guidance.
+- `src/data/interactions.json` — phenoconversion + drug-drug pairs.
+- `src/data/cpic_recommendations.json` — disk cache of CPIC API responses.
+- `sample/sample_23andme.txt` — demo file for "Load sample."
 
 ## How to run
 
 Requires Python 3.10+ and Node 18+.
 
 ```bash
-make install                          # pip install proxy deps
-cd server && cp .env.example .env     # then put ANTHROPIC_API_KEY in .env
+make install                        # pip install proxy deps
+cp server/.env.example server/.env  # paste your Anthropic key inside
 ```
 
-Then in two terminals:
+In two terminals:
 
 ```bash
 make proxy   # FastAPI on http://localhost:8001
 make web     # static server on http://localhost:8000/
 ```
 
-Open `http://localhost:8000/` — that serves `index.html`, the real app.
-Don't point judges at `dev/test.html`; that's a scratch page.
+Then open **http://localhost:8000/4-agent-chat.html** — the chat agent
+landing page. The classic structured form lives at
+http://localhost:8000/index.html as a fallback.
 
-Run the deterministic test suite:
+Run the tests:
 
 ```bash
-make test    # node tests/pgx.test.mjs — 52 cases
+make test         # node tests/pgx.test.mjs — 79 cases
+make parser-test  # 33 parser cases (23andMe + AncestryDNA)
 ```
 
-There's also `make smoketest` (`scripts/smoketest.sh`), which exercises the
-live proxy. Run it in a third terminal while `make proxy` is up.
+Rebuild the CPIC cache:
 
-## Architecture (30 seconds)
+```bash
+server/.venv/bin/python3 scripts/cache_cpic.py
+```
+
+## Architecture
 
 ```
-  file picker / sample button
+  Lindsay's landing page (4-agent-chat.html)
             │
             ▼
-  parser.worker.js  ─── 23andMe TSV → { rsid: genotype } ───┐
-  (Web Worker, off-main-thread)                             │
-                                                            ▼
-                                                       src/pgx.js
-                                       (strand decode, diplotype, phenotype,
-                                        coverage state — fully deterministic)
-                                                            │
-                          ┌─────────────────────────────────┤
-                          ▼                                 ▼
-              src/data/genes.json              src/data/drugs.json
-              (variants + rules)               (phenotype → guidance)
-                                                            │
-                                                            ▼
-                                            render result cards in index.html
-                                                            │
-                                          (optional)  POST { gene, phenotype, drug }
-                                                            ▼
-                                          server/proxy.py → Anthropic API
-                                                            │
-                                          plain-language wording over static text
+  Load DNA  →  parser.worker.js  →  src/pgx.js  →  phenotypes
+  (locally in your browser — nothing uploaded)
+            │
+            ▼
+  Type a question
+            │
+            ▼
+  src/explain.js  →  POST /api/explain  {kind: "chat", message, phenotypes}
+            │
+            ▼
+  server/proxy.py  →  Anthropic tool-use loop
+            │
+            ├──→  get_gene_status(gene)               (in-memory)
+            ├──→  lookup_cpic_recommendation(...)     (CPIC API or disk cache)
+            ├──→  check_drug_interactions()           (interactions.json)
+            └──→  suggest_clinician_questions(...)    (Claude paraphrase)
+            │
+            ▼
+  Reply (CPIC-cited, plain language, no doses, ends with a clinician question)
 ```
-
-Every box left of the proxy runs locally. The proxy never sees DNA, rsIDs,
-genotypes, or diplotypes — only `gene + phenotype + drug` tuples and the
-user's typed medication list.
 
 ## Privacy guarantee
 
-DNA never leaves the device. The Privacy Console makes that auditable —
-every network call this page makes is logged in the corner panel in real
-time, and you can read the actual payloads. We didn't claim privacy; we
-made it falsifiable.
+Your raw DNA never leaves this device. The Privacy Console makes that
+auditable — every network call this page makes is logged in real time, and
+you can read the actual payloads. We didn't claim privacy; we made it
+falsifiable.
 
 ## Not medical advice
 
 Informational only. Confirm any medication decision with a clinician or
-pharmacist. We mark CYP2D6 as "coverage limited" because consumer arrays
+pharmacist. CYP2D6 is marked "coverage limited" because consumer DNA arrays
 can't reliably call its structural variants — we'd rather show nothing than
 show a wrong status.
 
@@ -160,13 +173,12 @@ show a wrong status.
 
 Built by Alex ([@alejandro-publius](https://github.com/alejandro-publius)),
 Lindsay ([@lindsayy-l](https://github.com/lindsayy-l)), and
-Varsha ([@varsha106-pixel](https://github.com/varsha106-pixel)) at the
-SkyDeck hackathon.
+Varsha ([@varsha106-pixel](https://github.com/varsha106-pixel)) at
+AI Hackathon 2026 (Berkeley).
 
-Active branch is `alex/pgx-pipeline`. The deterministic spine
-(`src/pgx.js`, `src/data/*.json`, `tests/pgx.test.mjs`) is the highest-bar
-part of the codebase — changes there should keep `make test` green and add
-a new case for any new branch of logic.
+The deterministic spine (`src/pgx.js`, `src/data/*.json`, `tests/pgx.test.mjs`)
+is the highest-bar part of the codebase — changes there should keep
+`make test` green.
 
 ## License
 
