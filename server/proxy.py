@@ -13,8 +13,10 @@ Run:
 
 import json
 import os
+import random
 import re
 import sys
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -725,6 +727,7 @@ class ChatResponse(BaseModel):
     reply: str
     tool_trace: list[ChatToolCall] = Field(default_factory=list)
     cpic_evidence: list[CpicEvidence] = Field(default_factory=list)
+    decoys_sent: int = 0  # cover-traffic count for the privacy indicator
     source: Literal["claude", "fallback"]
 
 
@@ -957,6 +960,67 @@ def _handle_interactions(req: InteractionsKindRequest) -> InteractionsResponse:
 _ALLOWED_DRUGS_LC = {d.lower(): d for d in _ALLOWED_DRUGS}
 
 
+# ─── Cover-traffic / decoy queries ────────────────────────────────────────────
+# Privacy strategy: every real chat turn is mixed with N "decoy" Anthropic
+# calls drawn at random from our (gene, phenotype, drug) allowlist. Each decoy
+# uses the same model and the same chat system prompt; their responses are
+# read and discarded. Anthropic's log therefore contains 1 + N indistinguishable
+# requests from this proxy per real user turn, and cannot identify which one
+# was the real question. Decoys fire on background threads (daemon=True) AFTER
+# the real reply has been computed, so they add zero user-perceived latency.
+DECOY_COUNT = 5
+
+_DECOY_TEMPLATES = [
+    "What should I know about {drug} given my {gene} {phenotype} status?",
+    "My doctor wants to start me on {drug}. I'm a {gene} {phenotype}. Anything to be aware of?",
+    "Is {drug} safe for me as a {gene} {phenotype}?",
+    "Can I take {drug} if I'm {gene} {phenotype}?",
+    "Quick question — what does CPIC say about {drug} for a {gene} {phenotype}?",
+    "My pharmacist mentioned {drug}. I'm {gene} {phenotype}. Should I be concerned?",
+]
+
+
+def _fire_one_decoy(message: str) -> None:
+    """Fire a single decoy chat call and discard the response.
+
+    Uses the same model + same CHAT_SYSTEM as a real chat turn so the call
+    is size- and shape-indistinguishable to a passive observer at the
+    Anthropic API gateway. No tools attached — keeps cost down and the
+    response is discarded regardless.
+    """
+    try:
+        client.messages.create(
+            model=MODEL,
+            max_tokens=400,
+            system=CHAT_SYSTEM,
+            messages=[{"role": "user", "content": message}],
+        )
+    except Exception:
+        # A decoy failure is silent — the user must not know whether decoys
+        # succeeded; from Anthropic's view, errors happen on real traffic too.
+        pass
+
+
+def _spawn_decoy_storm(n: int = DECOY_COUNT) -> int:
+    """Fire N decoy calls on daemon threads. Returns the spawned count.
+
+    Returns 0 silently if the allowlist isn't loaded yet (e.g. during a
+    misconfigured boot) — the rest of the response still works.
+    """
+    tuples = list(_ALLOWED_TUPLES)
+    if not tuples:
+        return 0
+    spawned = 0
+    for _ in range(n):
+        gene, phenotype, drug = random.choice(tuples)
+        template = random.choice(_DECOY_TEMPLATES)
+        msg = template.format(gene=gene, phenotype=phenotype, drug=drug)
+        t = threading.Thread(target=_fire_one_decoy, args=(msg,), daemon=True)
+        t.start()
+        spawned += 1
+    return spawned
+
+
 def _execute_chat_tool(
     name: str,
     tool_input: dict,
@@ -1175,6 +1239,7 @@ def _handle_chat(req: ChatKindRequest) -> ChatResponse:
                 messages=messages,
             )
         except APIError:
+            decoys = _spawn_decoy_storm()
             return ChatResponse(
                 reply=(
                     "I couldn't reach the language model right now. The "
@@ -1183,6 +1248,7 @@ def _handle_chat(req: ChatKindRequest) -> ChatResponse:
                 ),
                 tool_trace=tool_trace,
                 cpic_evidence=[CpicEvidence(**c) for c in cpic_evidence_raw],
+                decoys_sent=decoys,
                 source="fallback",
             )
 
@@ -1190,10 +1256,12 @@ def _handle_chat(req: ChatKindRequest) -> ChatResponse:
             text = "".join(
                 b.text for b in response.content if getattr(b, "type", None) == "text"
             ).strip()
+            decoys = _spawn_decoy_storm()
             return ChatResponse(
                 reply=text or "I don't have a response for that.",
                 tool_trace=tool_trace,
                 cpic_evidence=[CpicEvidence(**c) for c in cpic_evidence_raw],
+                decoys_sent=decoys,
                 source="claude",
             )
 
@@ -1229,6 +1297,7 @@ def _handle_chat(req: ChatKindRequest) -> ChatResponse:
         ),
         tool_trace=tool_trace,
         cpic_evidence=[CpicEvidence(**c) for c in cpic_evidence_raw],
+        decoys_sent=_spawn_decoy_storm(),
         source="claude",
     )
 

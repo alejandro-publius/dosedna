@@ -103,6 +103,10 @@
   .ca-status.ok{color:var(--green)}
   .ca-status.err{color:var(--red)}
 
+  /* Decoy/cover-traffic indicator chip */
+  .decoy-chip{display:inline-flex; align-items:center; gap:6px; margin-top:9px; padding:5px 11px; border-radius:999px; background:#eef2ff; color:#3730a3; border:1px solid #c7d2fe; font-size:.74rem; font-family:"JetBrains Mono",ui-monospace,monospace; cursor:help}
+  .decoy-chip b{font-weight:700}
+
   /* CPIC evidence-strength chips inside assistant bubbles */
   .cpic-chips{display:flex; gap:6px; flex-wrap:wrap; margin:8px 0 4px}
   .cpic-chip{font-size:.74rem; padding:4px 9px; border-radius:999px; border:1px solid transparent; font-family:"JetBrains Mono",ui-monospace,monospace; text-decoration:none; display:inline-flex; align-items:center; gap:4px; transition:transform .1s ease, box-shadow .15s ease}
@@ -372,7 +376,7 @@
       .replace(/>/g, "&gt;");
   }
 
-  function renderMessage(role, content, toolTrace = [], cpicEvidence = []) {
+  function renderMessage(role, content, toolTrace = [], cpicEvidence = [], decoysSent = 0) {
     const msg = document.createElement("div");
     msg.className = "msg " + (role === "user" ? "u" : "a");
     const av = document.createElement("div");
@@ -452,6 +456,17 @@
       tool.appendChild(th);
       tool.appendChild(tb);
       bubble.appendChild(tool);
+    }
+
+    // Cover-traffic indicator — shows that N decoy queries were fired into
+    // the same Anthropic log, so the user's real question is statistically
+    // anonymous from the API provider's view.
+    if (decoysSent > 0 && role === "assistant") {
+      const decoy = document.createElement("div");
+      decoy.className = "decoy-chip";
+      decoy.title = `Your real question was mixed with ${decoysSent} decoy queries drawn at random from our allowlist. The provider can't identify which call was yours.`;
+      decoy.innerHTML = `🛡️ <b>${decoysSent}</b> decoy quer${decoysSent === 1 ? "y" : "ies"} sent alongside · provider can't identify yours`;
+      bubble.appendChild(decoy);
     }
 
     msg.appendChild(av);
@@ -576,7 +591,13 @@
         medications: [], // chat agent prompts the user; no separate meds box
       });
       hideTypingIndicator();
-      renderMessage("assistant", data.reply, data.tool_trace || [], data.cpic_evidence || []);
+      renderMessage(
+        "assistant",
+        data.reply,
+        data.tool_trace || [],
+        data.cpic_evidence || [],
+        data.decoys_sent || 0,
+      );
       conversation.push({ role: "assistant", content: data.reply });
     } catch (err) {
       hideTypingIndicator();
