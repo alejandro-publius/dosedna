@@ -26,6 +26,9 @@ market, see **[MARKET_LANDSCAPE.md](MARKET_LANDSCAPE.md)** — cited
 comparison vs. 23andMe Health (and its 2023 breach + 2025 bankruptcy),
 Genomind, OneOme, PharmCAT, and vanilla LLMs.
 
+For the judging-day pitch script, timing, and Q&A drills, see
+**[DEMO.md](DEMO.md)**.
+
 ---
 
 ## What's built
