@@ -43,6 +43,10 @@ question in natural English. Replies render with:
 - **Cover-traffic chip** indicating how many decoy queries were fired
   in parallel to the same provider.
 
+The interface keeps DoseDNA's azure/indigo look and now adds a matching
+**dark mode** — automatic from the OS preference, with a header toggle that
+overrides and remembers your choice (no flash on load).
+
 ### Deterministic PGx engine (`src/pgx.js`)
 - 6 genes called locally in the browser: CYP2C19, CYP2C9, VKORC1,
   SLCO1B1, TPMT, CYP2D6.
