@@ -313,4 +313,4 @@ changes there should keep `make test` green.
 
 ## License
 
-TBD.
+MIT. See [LICENSE](LICENSE).
