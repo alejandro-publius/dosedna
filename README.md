@@ -1,5 +1,7 @@
 # DoseDNA
 
+[![CI](https://github.com/alejandro-publius/dosedna/actions/workflows/ci.yml/badge.svg)](https://github.com/alejandro-publius/dosedna/actions/workflows/ci.yml)
+
 > **Ask your genome a straight question.** A chat agent that reads your
 > 23andMe / AncestryDNA file in your browser, calls your phenotypes with a
 > deterministic engine, fetches CPIC's verbatim clinical recommendation
