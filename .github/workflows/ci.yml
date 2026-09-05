@@ -1,0 +1,34 @@
+name: CI
+
+# Only the two suites that run offline. The others in the Makefile
+# (agent-test, pgxqa-test, lit-test, getrm, benchmark) talk to a live proxy
+# on localhost:8001 and a model behind it, so they stay a local check.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Phenotype engine (79 cases against CPIC's published calls)
+        run: make pgx-test
+
+      - name: Raw-file parser (33 cases, 23andMe and Ancestry layouts)
+        run: make parser-test
