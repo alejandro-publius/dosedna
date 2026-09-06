@@ -32,3 +32,24 @@ jobs:
 
       - name: Raw-file parser (33 cases, 23andMe and Ancestry layouts)
         run: make parser-test
+
+  proxy:
+    # The FastAPI proxy is the only server-side code. It refuses to start
+    # without an API key, so this does not launch it; it proves the pinned
+    # requirements still resolve and the module still compiles.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: server/requirements.txt
+
+      - name: Install the proxy's requirements
+        run: pip install -r server/requirements.txt
+
+      - name: Compile
+        run: python -m py_compile server/proxy.py scripts/cache_cpic.py scripts/precompute_explanations.py
