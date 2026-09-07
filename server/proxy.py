@@ -30,7 +30,6 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
-
 # BUILD_SPEC §12b: validate fields against an allowlist built from the bundled
 # genes.json + drugs.json, so the proxy can never be abused as an open Claude
 # endpoint. The only strings that reach the prompt are ones we authored.
