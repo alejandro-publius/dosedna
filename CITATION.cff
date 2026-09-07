@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: >-
+  If you reference DoseDNA, please cite it as below. This is a hackathon
+  research prototype (see README "Status" and "Not medical advice"), not a
+  peer-reviewed publication.
+title: DoseDNA
+type: software
+version: 0.1.0
+date-released: "2026-09-07"
+license: MIT
+repository-code: https://github.com/alejandro-publius/dosedna
+url: https://alejandro-publius.github.io/dosedna/
+abstract: >-
+  A privacy-first pharmacogenomics chat agent that reads a 23andMe or
+  AncestryDNA file in the browser, calls phenotypes with a deterministic
+  engine grounded in PharmVar variant tables and CPIC diplotype tables,
+  fetches CPIC's live clinical recommendation, and answers in plain
+  language. Built for AI Hackathon 2026 at Berkeley.
+authors:
+  - given-names: Alex
+    alias: alejandro-publius
+  - given-names: Lindsay
+    alias: lindsayy-l
+  - given-names: Varsha
+    alias: varsha106-pixel
+  - given-names: Rachel
+    alias: rachelselbrede
