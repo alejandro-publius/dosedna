@@ -3,3 +3,9 @@ uvicorn[standard]>=0.27
 anthropic>=0.40
 python-dotenv>=1.0
 pydantic>=2.6
+# Explicit: scripts/cache_cpic.py imports httpx directly (for its certifi
+# trust store) and used to get it for free as a transitive dep of anthropic.
+# Current anthropic releases pull in `httpx2` instead (a separate PyPI
+# package, not a version of httpx), so a fresh `make install` no longer
+# provides an importable `httpx` module unless it's listed here directly.
+httpx>=0.27

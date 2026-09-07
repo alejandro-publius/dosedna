@@ -36,13 +36,18 @@ check() {
 
 echo "== DoseDNA proxy smoke test =="
 
+# BUILD_SPEC §12a collapsed /api/questions and /api/check-meds into the single
+# POST /api/explain endpoint, discriminated by a "kind" field. This script
+# still targeted the pre-collapse paths and bodies (both gone: the old paths
+# 404, and the "explain" body was missing "kind" too, which the discriminated
+# union requires) — updated to match server/proxy.py's current schema.
 check "health"       GET  "/"
 check "explain"      POST "/api/explain" \
-  '{"gene":"CYP2C19","phenotype":"Poor metabolizer","drug":"clopidogrel"}'
-check "questions"    POST "/api/questions" \
-  '{"phenotypes":[{"gene":"CYP2C19","phenotype":"Poor metabolizer"},{"gene":"SLCO1B1","phenotype":"Decreased function"}],"medications":["clopidogrel","simvastatin"]}'
-check "check-meds"   POST "/api/check-meds" \
-  '{"phenotypes":[{"gene":"CYP2C19","phenotype":"Normal metabolizer"}],"medications":["clopidogrel","omeprazole"]}'
+  '{"kind":"explain","gene":"CYP2C19","phenotype":"Poor metabolizer","drug":"clopidogrel"}'
+check "questions"    POST "/api/explain" \
+  '{"kind":"questions","phenotypes":[{"gene":"CYP2C19","phenotype":"Poor metabolizer"},{"gene":"SLCO1B1","phenotype":"Decreased function"}],"medications":["clopidogrel","simvastatin"]}'
+check "interactions" POST "/api/explain" \
+  '{"kind":"interactions","phenotypes":[{"gene":"CYP2C19","phenotype":"Normal metabolizer"}],"medications":["clopidogrel","omeprazole"]}'
 
 echo
 if [[ "$FAIL" -eq 0 ]]; then
