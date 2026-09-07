@@ -1,8 +1,10 @@
 name: CI
 
-# Only the two suites that run offline. The others in the Makefile
-# (agent-test, pgxqa-test, lit-test, getrm, benchmark) talk to a live proxy
-# on localhost:8001 and a model behind it, so they stay a local check.
+# Only the suites that run offline, no proxy or model required. The others
+# in the Makefile (agent-test, pgxqa-test, lit-test) talk to a live proxy on
+# localhost:8001 and a model behind it, so they stay a local check. `getrm`
+# is also offline but currently has zero fixtures (scaffold only — see the
+# TODO at the top of tests/getrm.test.mjs), so it's not worth a CI step yet.
 on:
   push:
     branches: [main]
@@ -33,6 +35,15 @@ jobs:
       - name: Raw-file parser (33 cases, 23andMe and Ancestry layouts)
         run: make parser-test
 
+      - name: Privacy boundary (client never sends genotype-derived raw data)
+        run: make privacy-test
+
+      - name: Diplotype known-answer table (het / hom / uncallable per gene)
+        run: make known-answer-test
+
+      - name: Patient pipeline benchmark (19 file → parser → engine assertions, no API needed)
+        run: make benchmark
+
   proxy:
     # The FastAPI proxy is the only server-side code. It refuses to start
     # without an API key, so this does not launch it; it proves the pinned
@@ -53,3 +64,6 @@ jobs:
 
       - name: Compile
         run: python -m py_compile server/proxy.py scripts/cache_cpic.py scripts/precompute_explanations.py
+
+      - name: Lint (ruff)
+        run: pipx run ruff check .

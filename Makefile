@@ -1,4 +1,4 @@
-.PHONY: install proxy web all clean smoketest test pgx-test parser-test getrm agent-test pgxqa-test lit-test benchmark
+.PHONY: install proxy web all clean smoketest test pgx-test parser-test privacy-test known-answer-test getrm agent-test pgxqa-test lit-test benchmark
 
 install:
 	cd server && pip install -r requirements.txt
@@ -20,6 +20,12 @@ pgx-test:
 parser-test:
 	@node tests/parser.test.mjs
 
+privacy-test:
+	@node tests/privacy-boundary.test.mjs
+
+known-answer-test:
+	@node tests/diplotype-known-answers.test.mjs
+
 getrm:
 	@node tests/getrm.test.mjs
 
@@ -38,7 +44,7 @@ benchmark:
 smoketest:
 	@bash scripts/smoketest.sh
 
-test: pgx-test
+test: pgx-test privacy-test known-answer-test
 	@echo
 	@echo "Run 'make smoketest' separately while 'make proxy' is up."
 	@echo "Run 'make getrm' separately for CDC GeT-RM known-answer fixtures."
