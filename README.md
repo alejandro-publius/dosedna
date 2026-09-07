@@ -1,12 +1,17 @@
 # DoseDNA
 
 [![CI](https://github.com/alejandro-publius/dosedna/actions/workflows/ci.yml/badge.svg)](https://github.com/alejandro-publius/dosedna/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/github/license/alejandro-publius/dosedna)](LICENSE)
+[![Node >=18](https://img.shields.io/badge/node-%3E%3D18-339933?logo=node.js&logoColor=white)](#how-to-run)
+[![Python >=3.10](https://img.shields.io/badge/python-%3E%3D3.10-3776AB?logo=python&logoColor=white)](#how-to-run)
 
 > **Ask your genome a straight question.** A chat agent that reads your
 > 23andMe / AncestryDNA file in your browser, calls your phenotypes with a
 > deterministic engine, fetches CPIC's verbatim clinical recommendation
 > live, and answers in plain language — with provider-side anonymity via
 > cover traffic.
+
+![DoseDNA loaded with the bundled sample DNA file: six called phenotypes, the chat agent's summary, and the privacy strip showing 0 raw DNA bytes observed](docs/screenshot.png)
 
 The conversation is on top. Underneath, it's a deterministic engine that
 calls your phenotypes from PharmVar variant tables and CPIC diplotype
@@ -20,8 +25,10 @@ Built for [AI Hackathon 2026 at Berkeley](https://hackberkeley.org),
 **Best Beginner Hack** track. Science-fair judging Sunday June 21,
 1–3pm.
 
-Live preview (landing page only, chat requires the local proxy):
-[alejandro-publius.github.io/dosedna](https://alejandro-publius.github.io/dosedna/)
+Live preview: [alejandro-publius.github.io/dosedna](https://alejandro-publius.github.io/dosedna/) —
+the full deterministic pipeline runs there (load the bundled sample DNA or
+your own file and see real phenotype calls); only the chat replies need the
+local proxy running.
 
 For the competitive landscape and where DoseDNA fits in the existing PGx
 market, see **[MARKET_LANDSCAPE.md](MARKET_LANDSCAPE.md)** — cited
@@ -55,6 +62,12 @@ question in natural English. Replies render with:
   if every branch agrees. Otherwise "Not determined."
 - **79/79 unit tests** in `tests/pgx.test.mjs`, against PharmVar's
   variant definitions and CPIC's published diplotype tables.
+- **40/40 additional known-answer tests** in
+  `tests/diplotype-known-answers.test.mjs`: a heterozygous, homozygous, and
+  present-but-uncallable genotype for each of the 5 called genes (VKORC1 and
+  SLCO1B1 had no direct phenotype-level test before this pass — only
+  indirect coverage via drug-flag colors), plus two more well-known CYP2C19
+  star-allele combinations.
 
 ### In-browser parser (`src/parser.worker.js`)
 - 23andMe **and** AncestryDNA TSV formats — auto-detected from header +
@@ -132,9 +145,12 @@ We do NOT claim "perfect privacy." We claim **architectural minimization
 plus provider-side anonymity**:
 
 1. **Raw DNA never leaves the browser.** The parser worker and the PGx
-   engine run in-page; file bytes stay in worker scope. The Privacy
-   Console makes this falsifiable in real time — open it, watch the
-   "0 raw DNA bytes uploaded" counter.
+   engine run in-page; file bytes stay in worker scope. The privacy strip
+   under the hero makes this falsifiable at a glance — it shows a live
+   "0 raw DNA bytes through observed channels" counter. (An earlier,
+   interactive "Privacy Console" panel was removed in favor of this
+   always-visible strip — see `git log` for `src/privacyConsole.js` — this
+   section previously still described the removed panel.)
 
 2. **Only de-identified labels reach the LLM.** Every payload to
    Anthropic contains `{gene, phenotype, drug name}`. No rsIDs, no
@@ -144,7 +160,11 @@ plus provider-side anonymity**:
 3. **Provider-side anonymity via cover traffic.** Even those minimal
    labels are mixed with 5 decoy queries per real chat turn. Anthropic's
    API log shows 6 indistinguishable requests; they cannot link any of
-   them to a user.
+   them to a user. Known limit, disclosed here (see `_fire_one_decoy` in
+   `server/proxy.py`): a real chat turn runs a 2-3 round tool-use loop
+   while a decoy terminates after round 1, so request-count-per-turn is a
+   remaining (unclosed) tell for a sophisticated observer watching traffic
+   shape rather than content.
 
 4. **We log nothing on the proxy.** Request bodies are never written to
    disk; no analytics, no telemetry.
@@ -250,11 +270,13 @@ Open **http://localhost:8000/** — chat agent landing page.
 Run the tests:
 
 ```bash
-make test          # 79 PGx engine cases
-make parser-test   # 33 parser cases
-make lit-test      # 7 literature-grounded cases (requires proxy + API key)
-make benchmark     # 19 patient-pipeline assertions, no API required
-make pgxqa-test    # PGxQA expert-review benchmark (requires proxy + API key)
+make test              # 79 PGx engine cases + 20 privacy-boundary cases + 40 known-answer cases
+make parser-test       # 33 parser cases
+make privacy-test      # 20 cases: the client never puts genotype-derived data in an outbound payload
+make known-answer-test # 40 het/hom/uncallable star-allele cases across all 5 called genes
+make lit-test          # 7 literature-grounded cases (requires proxy + API key)
+make benchmark         # 19 patient-pipeline assertions, no API required
+make pgxqa-test        # PGxQA expert-review benchmark (requires proxy + API key)
 ```
 
 Rebuild the CPIC cache:
