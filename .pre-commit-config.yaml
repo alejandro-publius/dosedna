@@ -1,0 +1,15 @@
+# Install: pip install pre-commit && pre-commit install
+# Only Python here (server/, scripts/) — everything else in this repo is
+# plain JS/HTML with no build step or existing formatter to hook in.
+#
+# ruff-format is deliberately NOT enabled: running it once reformats ~160
+# lines of already-working, deliberately-wrapped code across server/proxy.py
+# for whitespace/line-break style only, no behavior change. That's a bigger
+# rewrite than this pass should make unilaterally — left for the repo owner
+# to opt into.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.21
+    hooks:
+      - id: ruff-check
+        args: [--fix]
