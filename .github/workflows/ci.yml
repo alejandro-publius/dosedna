@@ -66,4 +66,8 @@ jobs:
         run: python -m py_compile server/proxy.py scripts/cache_cpic.py scripts/precompute_explanations.py
 
       - name: Lint (ruff)
-        run: pipx run ruff check .
+        # Pinned, not floating. An unpinned linter turns every new ruff
+        # release into a surprise red main: 0.16 enabled SIM117 by default
+        # and broke a sibling repo's build the day it landed. Bump this
+        # deliberately, with the findings reviewed, not by accident.
+        run: pipx run ruff==0.16.6 check .
