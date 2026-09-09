@@ -100,31 +100,44 @@ function evalDiplotype(spec, genotypes) {
   const phenotypes = new Set();
   const counts = new Array(unknown.length).fill(0);
 
+  // Sentinel for a slot assignment that cannot physically exist (3+ alt
+  // copies packed into 2 chromosome slots). This is the ONLY case that
+  // should be excluded from the vote below. A slot assignment that IS
+  // physically valid but whose resulting diplotype string has no entry in
+  // `diplotype_to_phenotype` must NOT be silently dropped the same way —
+  // that would let an incomplete/stale CPIC table quietly out-vote a real
+  // ambiguity and report a confident phenotype nobody actually verified.
+  // It contributes NOT_DETERMINED instead, same as the activity-score and
+  // variant-count engines already do for their own "no mapped bucket" case.
+  const IMPOSSIBLE = Symbol("impossible-assignment");
+
   function tryAssignment() {
     const slots = [def, def];
     for (const k of known) {
       for (let i = 0; i < k.altCount; i++) {
         const slot = slots.indexOf(def);
-        if (slot === -1) return null; // 3+ alts in 2 chromosomes → biologically impossible
+        if (slot === -1) return IMPOSSIBLE; // 3+ alts in 2 chromosomes → biologically impossible
         slots[slot] = k.allele;
       }
     }
     for (let u = 0; u < unknown.length; u++) {
       for (let i = 0; i < counts[u]; i++) {
         const slot = slots.indexOf(def);
-        if (slot === -1) return null;
+        if (slot === -1) return IMPOSSIBLE;
         slots[slot] = unknown[u].allele;
       }
     }
     const k1 = `${slots[0]}/${slots[1]}`;
     const k2 = `${slots[1]}/${slots[0]}`;
-    return spec.diplotype_to_phenotype[k1] || spec.diplotype_to_phenotype[k2] || null;
+    return (
+      spec.diplotype_to_phenotype[k1] || spec.diplotype_to_phenotype[k2] || NOT_DETERMINED
+    );
   }
 
   function iterate(i) {
     if (i === unknown.length) {
       const p = tryAssignment();
-      if (p) phenotypes.add(p);
+      if (p !== IMPOSSIBLE) phenotypes.add(p);
       return;
     }
     for (let c = 0; c <= 2; c++) {
