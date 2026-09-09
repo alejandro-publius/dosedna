@@ -555,6 +555,65 @@ function drugRow(results, gene, drug) {
   );
 }
 
+// ─── Diplotype engine: an out-of-table diplotype must never be silently ─────
+// dropped from the phenotype-if-invariant vote (regression test, not tied to
+// the shipped genes.json — it constructs its own deliberately incomplete
+// spec so the test doesn't depend on whether CYP2C19's live CPIC table
+// happens to be complete today).
+//
+// Setup: one position is a confirmed het variant allele (*2). The second
+// position is entirely absent from the file, so the engine must enumerate
+// what that missing position *could* be: reference (*1), the same variant
+// again (impossible — would be 3 alt copies across 2 chromosomes, correctly
+// excluded), or a different variant allele (*3). The *2/*3 diplotype is
+// biologically valid and reachable, but this spec's table doesn't define
+// it (simulating a partial/incomplete CPIC refresh). Since the reachable
+// outcomes disagree (*1/*2 = Intermediate vs. *2/*3 = unmapped), the honest
+// answer is "Not determined" — never a confident guess that quietly ignores
+// the branch the table doesn't cover.
+section("Diplotype engine — incomplete table must not fake confidence");
+{
+  const incompleteSpec = {
+    genes: {
+      TESTGENE: {
+        method: "diplotype",
+        default_allele: "*1",
+        variants: [
+          { rsid: "rsAAA", allele: "*2", ref: "G", alt: "A", file_strand: "plus" },
+          { rsid: "rsBBB", allele: "*3", ref: "A", alt: "C", file_strand: "plus" },
+        ],
+        diplotype_to_phenotype: {
+          "*1/*1": "Normal metabolizer",
+          "*1/*2": "Intermediate metabolizer",
+          "*2/*1": "Intermediate metabolizer",
+          // *2/*3 and *3/*2 intentionally omitted.
+        },
+      },
+    },
+  };
+  const testEngine = buildEngine(incompleteSpec, { drugs: {} });
+  const result = testEngine.genotypesToResults({ rsAAA: "GA" })[0];
+  assert(
+    'reachable-but-unmapped diplotype forces "Not determined", not a confident guess',
+    result.phenotype === "Not determined",
+    `got phenotype="${result.phenotype}"`,
+  );
+
+  // Sanity check on the same engine: when every reachable diplotype DOES
+  // agree (and is in the table), the call should still resolve confidently.
+  // rsBBB present + reference confirms *1 on that chromosome outright.
+  const confidentResult = testEngine.genotypesToResults({
+    rsAAA: "GA",
+    rsBBB: "AA",
+  })[0];
+  assert(
+    "fully-resolved, in-table diplotype still reports confidently",
+    confidentResult.phenotype === "Intermediate metabolizer" &&
+      confidentResult.coverage_state === "confident",
+    `got phenotype="${confidentResult.phenotype}" coverage_state="${confidentResult.coverage_state}"`,
+  );
+}
+
 // ─── Summary ─────────────────────────────────────────────────────────────────
 process.stdout.write(`\n${pass} passed, ${fail} failed\n`);
 if (fail > 0) {
