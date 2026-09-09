@@ -39,6 +39,20 @@ _DRUGS_PATH = _REPO_ROOT / "src" / "data" / "drugs.json"
 _EXPLANATIONS_PATH = _REPO_ROOT / "src" / "data" / "explanations.json"
 _INTERACTIONS_PATH = _REPO_ROOT / "src" / "data" / "interactions.json"
 
+# BUILD_SPEC §15: "post-validate Claude output against a denylist ... Section
+# 13 step 3 applies at runtime too for any live call." scripts/precompute_
+# explanations.py already implements that denylist (dose patterns, imperative
+# dosing instructions, clinical-claim verbs, drug/brand/class leakage) for the
+# offline batch job; reuse it here instead of re-deriving a second copy that
+# could drift. This is the only place in the request path that talks to the
+# live model, so it's the only place this filter needs to run.
+sys.path.insert(0, str(_REPO_ROOT))
+from scripts.precompute_explanations import (  # noqa: E402
+    DENY_DOSE_RE,
+    collect_known_drugs,
+    validate_explanation,
+)
+
 # Per BUILD_SPEC §12b step 2: check the precomputed bundle before calling Claude
 # live. Bundle is optional — if scripts/precompute_explanations.py hasn't been
 # run yet, we silently fall through to the live path.
@@ -103,6 +117,11 @@ def _load_drugs_guidance() -> dict:
 
 
 _DRUGS_GUIDANCE = _load_drugs_guidance()
+
+# For validate_explanation()'s drug-leakage check (BUILD_SPEC §15): every
+# generic drug name we know about, so a live explanation about drug A can be
+# rejected if it also happens to mention drug B.
+_KNOWN_DRUGS = collect_known_drugs({"drugs": _DRUGS_GUIDANCE})
 
 # Universal phenotypes the deterministic engine can emit even when a gene
 # isn't in the table (incomplete coverage). Always permitted.
@@ -778,16 +797,30 @@ def _handle_explain(req: ExplainKindRequest) -> ExplainResponse:
         f"Explain in simple terms what it means to be a {req.gene} "
         f"{req.phenotype} taking {req.drug}, and what to ask the doctor."
     )
+    fallback = (
+        f"Based on your {req.gene} {req.phenotype} result, ask your clinician "
+        f"how to safely take {req.drug}."
+    )
     try:
         text = _call_claude(EXPLAIN_SYSTEM, user_message)
     except APIError:
         # README §3 fallback: still show the user something useful when
         # Claude is unreachable. UI keys on source="fallback".
-        fallback = (
-            f"Based on your {req.gene} {req.phenotype} result, ask your clinician "
-            f"how to safely take {req.drug}."
-        )
         return ExplainResponse(explanation=fallback, source="fallback")
+
+    # BUILD_SPEC §15: "post-validate Claude output against a denylist ...
+    # Section 13 step 3 applies at runtime too for any live call." A live
+    # call is rare (the happy path is the bundle above), but rare is not
+    # never — this is the one path in the whole app where model-generated
+    # text can reach a patient without ever having been reviewed. Fail
+    # exactly like an unreachable API: keep the safe bundled-style wording,
+    # never the ungrounded text.
+    failure = validate_explanation(
+        text, req.gene, req.phenotype, req.drug, req.coverage_state, _KNOWN_DRUGS
+    )
+    if failure is not None:
+        return ExplainResponse(explanation=fallback, source="fallback")
+
     return ExplainResponse(explanation=text, source="claude")
 
 
@@ -1265,9 +1298,32 @@ def _handle_chat(req: ChatKindRequest) -> ChatResponse:
             text = "".join(
                 b.text for b in response.content if getattr(b, "type", None) == "text"
             ).strip()
+            reply_text = text or "I don't have a response for that."
+            # Defense-in-depth for CHAT_SYSTEM's own hard rule ("Never state a
+            # specific dose"). Unlike /api/explain, a chat reply isn't pinned
+            # to one (gene, phenotype, drug) tuple, so the full drug-leakage
+            # denylist doesn't apply cleanly here — but there is never a
+            # legitimate reason for a compliant reply to contain a dose
+            # pattern, so this narrow check is safe to enforce unconditionally.
+            if DENY_DOSE_RE.search(reply_text):
+                reply_text = (
+                    "I can't share that response as worded — it may include "
+                    "a specific dose, which I'm not allowed to give. Ask me "
+                    "about a specific drug and I'll look up the CPIC "
+                    "guidance for your result, and bring dosing questions to "
+                    "your clinician or pharmacist."
+                )
+                decoys = _spawn_decoy_storm()
+                return ChatResponse(
+                    reply=reply_text,
+                    tool_trace=tool_trace,
+                    cpic_evidence=[CpicEvidence(**c) for c in cpic_evidence_raw],
+                    decoys_sent=decoys,
+                    source="fallback",
+                )
             decoys = _spawn_decoy_storm()
             return ChatResponse(
-                reply=text or "I don't have a response for that.",
+                reply=reply_text,
                 tool_trace=tool_trace,
                 cpic_evidence=[CpicEvidence(**c) for c in cpic_evidence_raw],
                 decoys_sent=decoys,

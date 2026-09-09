@@ -1,4 +1,4 @@
-.PHONY: install proxy web all clean smoketest test pgx-test parser-test privacy-test known-answer-test getrm agent-test pgxqa-test lit-test benchmark
+.PHONY: install proxy web all clean smoketest test pgx-test parser-test privacy-test known-answer-test getrm agent-test pgxqa-test lit-test benchmark proxy-test
 
 install:
 	cd server && pip install -r requirements.txt
@@ -41,10 +41,16 @@ lit-test:
 benchmark:
 	@node tests/patient-benchmark.test.mjs
 
+# Offline — never calls Anthropic. ANTHROPIC_API_KEY only needs to be set to
+# SOMETHING (proxy.py exits without one); every function that would talk to
+# the model is monkeypatched before it's called. See server/test_proxy.py.
+proxy-test:
+	@ANTHROPIC_API_KEY=$${ANTHROPIC_API_KEY:-sk-ant-test-placeholder-not-real} python3 server/test_proxy.py
+
 smoketest:
 	@bash scripts/smoketest.sh
 
-test: pgx-test privacy-test known-answer-test
+test: pgx-test privacy-test known-answer-test proxy-test
 	@echo
 	@echo "Run 'make smoketest' separately while 'make proxy' is up."
 	@echo "Run 'make getrm' separately for CDC GeT-RM known-answer fixtures."

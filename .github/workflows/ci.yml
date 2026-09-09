@@ -45,9 +45,13 @@ jobs:
         run: make benchmark
 
   proxy:
-    # The FastAPI proxy is the only server-side code. It refuses to start
-    # without an API key, so this does not launch it; it proves the pinned
-    # requirements still resolve and the module still compiles.
+    # The FastAPI proxy is the only server-side code. It refuses to start a
+    # live server without a real API key, so this job never boots uvicorn —
+    # it proves the pinned requirements still resolve, the module compiles,
+    # and (server/test_proxy.py) that the claim-boundary logic inside it is
+    # correct. That test needs ANTHROPIC_API_KEY set to SOMETHING to get past
+    # the module's own import-time guard, but never makes a network call —
+    # every function that would reach Anthropic is monkeypatched first.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -64,6 +68,11 @@ jobs:
 
       - name: Compile
         run: python -m py_compile server/proxy.py scripts/cache_cpic.py scripts/precompute_explanations.py
+
+      - name: Claim-boundary tests (BUILD_SPEC §15 denylist, mocked model calls, no network)
+        env:
+          ANTHROPIC_API_KEY: sk-ant-ci-placeholder-not-real
+        run: make proxy-test
 
       - name: Lint (ruff)
         # Pinned, not floating. An unpinned linter turns every new ruff
