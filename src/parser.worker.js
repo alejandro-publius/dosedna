@@ -108,13 +108,41 @@ function parse(fileText) {
   let { provider, chip_hint } = detectProviderFromHeader(headerText);
 
   // Column-count fallback: 4 cols = 23andMe-style, 5 cols = Ancestry-style.
+  // SAFETY: column count alone is not enough evidence — a totally unrelated
+  // format can coincidentally have 4 or 5 tab-separated columns (e.g. a
+  // "rsid, chromosome, position, ref_allele, alt_allele" annotation dump,
+  // where ref != alt always, would silently read as a confident heterozygous
+  // call for every single row, regardless of the person's real genotype).
+  // Only trust the count when the header itself names the columns we expect
+  // ("allele1"/"allele2" for the 5-col layout, "genotype" for the 4-col
+  // layout) — real 23andMe/AncestryDNA exports (and any well-behaved
+  // re-export of them) document their own columns this way. Absent that
+  // corroboration, we have zero positive evidence of the schema and must not
+  // guess; the file is reported as unparseable rather than silently coerced
+  // into a call (BUILD_SPEC §9: "reject gracefully").
+  const lowerHeader = headerText.toLowerCase();
+  const headerNamesAncestryColumns =
+    lowerHeader.includes("allele1") && lowerHeader.includes("allele2");
+  const headerNamesTwentyThreeColumns = lowerHeader.includes("genotype");
   if (provider === "unknown") {
-    if (firstDataCols === 5) provider = "AncestryDNA";
-    else if (firstDataCols === 4) provider = "23andMe";
+    if (firstDataCols === 5 && headerNamesAncestryColumns) provider = "AncestryDNA";
+    else if (firstDataCols === 4 && headerNamesTwentyThreeColumns) provider = "23andMe";
   }
 
-  // Decide whether genotype is one column or two based on provider, with
-  // column-count as a safety net per-row.
+  if (provider === "unknown") {
+    throw new Error(
+      "Unrecognized DNA file format — this doesn't match a known 23andMe " +
+      "or AncestryDNA layout (no vendor name and no recognizable column " +
+      "header found). Refusing to guess at the column layout."
+    );
+  }
+
+  // Decide whether genotype is one column or two based on the now-confirmed
+  // provider. Deliberately NOT also falling back to `cols.length === 5`
+  // per-row: once the file's schema is established, a single malformed row
+  // with a stray extra column must not be silently reinterpreted under the
+  // other vendor's schema — it should fail that row's isValidGenotype check
+  // (or be truncated to the correct column) instead of fabricating a call.
   const ancestryStyle = provider === "AncestryDNA";
 
   const genotypes = Object.create(null);
@@ -152,7 +180,7 @@ function parse(fileText) {
     const cols = line.split("\t");
 
     let genotype;
-    if (ancestryStyle || cols.length === 5) {
+    if (ancestryStyle) {
       // ─── AncestryDNA branch ──────────────────────────────────────────────
       // PENDING REAL-FILE VALIDATION: implemented strictly from BUILD_SPEC §9
       // ("rsid<TAB>chromosome<TAB>position<TAB>allele1<TAB>allele2"). The spec
